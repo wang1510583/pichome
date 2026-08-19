@@ -197,9 +197,11 @@
 			<li 
 				class="el-dropdown-menu__item" 
 				v-if="ImageMenu.operation.delete"
+				role="menuitem"
+				style="color: var(--el-color-danger);"
 				@click.stop="ImageOperation('delete')">
-				<el-icon><Milk-Tea /></el-icon>
-                {lang move_to_recycle}
+				<el-icon><Delete /></el-icon>
+                删除素材
 			</li>
 			<li
 				class="el-dropdown-menu__item" 
