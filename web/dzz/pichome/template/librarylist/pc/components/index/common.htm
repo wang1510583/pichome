@@ -150,7 +150,7 @@
 				
 				this.OpenDetailType = getpagesetting && getpagesetting.opentype || 'new';
 				//筛选显示隐藏
-				let showscreen = sessionStorage.getItem('showscreen');
+				let showscreen = localStorage.getItem('showscreen');
 				if(parseInt(showscreen) > -1){
 					this.Screenshow = parseInt(showscreen)?true:false;
 					this.HeaderRightBtnScreen.active = parseInt(showscreen);
@@ -158,7 +158,7 @@
 				
 
 				//布局方式
-				let layout = sessionStorage.getItem('layout');
+				let layout = localStorage.getItem('layout');
 				if(layout){
 					this.HeaderRightBtnShow.layout = layout;
 					this.ImageProps.layout = layout;
@@ -168,7 +168,7 @@
 				}
 
 				//其它信息
-				let other = sessionStorage.getItem('other');
+				let other = localStorage.getItem('other');
 				if(other){
 					this.HeaderRightBtnShow.other = other;
 					this.ImageProps.ShowMessage.other = other;
@@ -182,7 +182,7 @@
 					
 				}
 				//显示信息
-				let display = sessionStorage.getItem('display');
+				let display = localStorage.getItem('display');
 				if(display && display != 'empty'){
 					display = display.split(',');
 					this.HeaderShowChange({
@@ -194,19 +194,19 @@
 					this.ImageProps.ShowMessage.display = getpagesetting && getpagesetting.display || [];
 				}
 				//排序方式
-				let sort = sessionStorage.getItem('sort');
+				let sort = localStorage.getItem('sort');
 				if(sort){
 					this.HeaderRightBtnShow.sort = sort;
 				}else{
 					this.HeaderRightBtnShow.sort = getpagesetting && getpagesetting.desc || 'desc';
 				}
-				let order = sessionStorage.getItem('order');
+				let order = localStorage.getItem('order');
 				if(order){
 					this.HeaderRightBtnShow.order = order;
 				}else{
 					this.HeaderRightBtnShow.order = getpagesetting && getpagesetting.sort || 'btime';
 				}
-				let hassub = sessionStorage.getItem('hassub');
+				let hassub = localStorage.getItem('hassub');
 				this.hassub = hassub?parseInt(hassub):1;
 				
 				if(res.folderdata){

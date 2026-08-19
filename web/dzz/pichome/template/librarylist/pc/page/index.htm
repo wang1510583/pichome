@@ -436,7 +436,7 @@
 			this.DocumentAppid = this.CommonGetHashParam('appid');
 			if(this.DocumentAppid){
 				this.ScreenParam.appid = this.DocumentAppid;
-				var ShowScreen = sessionStorage.getItem('showscreen')? sessionStorage.getItem('showscreen'):1;
+				var ShowScreen = localStorage.getItem('showscreen')? localStorage.getItem('showscreen'):1;
 				if(parseInt(ShowScreen)){
 					this.Screenshow = true;
 				}else{

@@ -127,26 +127,26 @@
 						let index = display.indexOf('other');
 						if(index<0){
 							self.ImageProps.ShowMessage.other = '';
-							sessionStorage.removeItem('other');
+							localStorage.removeItem('other');
 						}else{
 							display.splice(index,1);
 							self.ImageProps.ShowMessage.other = this.HeaderRightBtnShow.other; 
-							sessionStorage.setItem('other',this.HeaderRightBtnShow.other);
+							localStorage.setItem('other',this.HeaderRightBtnShow.other);
 						}
 						if(data.value && data.value.length){
-							sessionStorage.setItem('display',data.value.join(','));
+							localStorage.setItem('display',data.value.join(','));
 						}else{
-							sessionStorage.setItem('display','empty');
+							localStorage.setItem('display','empty');
 						}
 						self.ImageProps.ShowMessage.display = display;
 					break;
 					case 'other':
-						sessionStorage.setItem('other',data.value);
+						localStorage.setItem('other',data.value);
 						self.ImageProps.ShowMessage.other = data.value;
 					break;
 					case 'sort':
 					case 'order':
-						sessionStorage.setItem(data.type,data.value);
+						localStorage.setItem(data.type,data.value);
 						this.HeaderRightBtnSubmit();
 					break;
 					case 'column':
@@ -156,7 +156,7 @@
 					break;
 					case 'layout':
 						this.ImageProps.layout = data.value;
-						sessionStorage.setItem('layout',data.value);
+						localStorage.setItem('layout',data.value);
 					break;
 				}
 			},
@@ -166,7 +166,7 @@
 				if(this.HeaderRightBtnScreen.active == val){
 					return false;
 				}
-				sessionStorage.setItem('showscreen',val);
+				localStorage.setItem('showscreen',val);
 				this.HeaderRightBtnScreen.active = val;
 				if(val){
 					this.Screenshow = true;
