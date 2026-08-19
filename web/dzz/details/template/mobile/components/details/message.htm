@@ -1,0 +1,203 @@
+<el-drawer
+	v-model:model-value="InformationPopup"
+	class="detail-popup-message"
+	:class="showdata[showdataindex] && !showdata[showdataindex].data.footer?'noPadding':''"
+	direction="rtl"
+	size="100%"
+	append-to-body
+	>
+	<div class="detail-popup-message-header">
+		<i class="el-icon-arrow-left" @click="InformationPopup=false"></i>
+		<span class="header-title">{lang deafil_info}</span>
+		<div></div>
+	</div>
+	<div style="position: relative;background: var(--el-bg-color);padding: 15px;" v-cloak>
+
+		<div class="DetailPopup-content" style="padding: 0 16px;">
+
+				<div class="name">
+					<template v-if="parseInt(showdata[showdataindex].data.level)==1">
+						<el-image
+							 style="width: 25px; height: 25px;vertical-align: bottom;"
+							fit="contain"
+							src="dzz/pichome/image/grade/1.png"
+						></el-image>
+					</template>
+					<template v-else-if="parseInt(showdata[showdataindex].data.level)==2">
+						<el-image
+							 style="width: 25px; height: 25px;vertical-align: bottom;"
+							fit="contain"
+							src="dzz/pichome/image/grade/2.png"
+						></el-image>
+					</template>
+					<template v-else-if="parseInt(showdata[showdataindex].data.level)==3">
+						<el-image
+								style="width: 25px; height: 25px;vertical-align: bottom;"
+								fit="contain"
+								src="dzz/pichome/image/grade/3.png"
+						></el-image>
+					</template>
+					<template v-else-if="parseInt(showdata[showdataindex].data.level)==4">
+						<el-image
+								style="width: 25px; height: 25px;vertical-align: bottom;"
+								fit="contain"
+								src="dzz/pichome/image/grade/4.png"
+						></el-image>
+					</template>
+					<template v-else-if="parseInt(showdata[showdataindex].data.level)==5">
+						<el-image
+								style="width: 25px; height: 25px;vertical-align: bottom;"
+								fit="contain"
+								src="dzz/pichome/image/grade/5.png"
+						></el-image>
+					</template>
+					{{showdata[showdataindex].data.name}}.{{showdata[showdataindex].data.ext}}
+				</div>
+				<div class="block" v-if="showdata[showdataindex].data.colors && showdata[showdataindex].data.colors.length">
+					<div class="title">{lang color}</div>
+					<div class="block-item colors">
+						<div class="colors" v-for="item in showdata[showdataindex].data.colors" @click="MessageSearch('color',item)">
+							<div :style="{background: '#'+item}"></div>
+						</div>
+					</div>
+				</div>
+				<div class="block" v-if="showdata[showdataindex].data.tag && showdata[showdataindex].data.tag.length">
+					<div class="title">{lang label}</div>
+					<div class="block-item tag">
+						<div class="tag" v-for="item in showdata[showdataindex].data.tag" @click="MessageSearch('tag',item.key)">{{item.val}}</div>
+					</div>
+				</div>
+				<div class="block" v-if="showdata[showdataindex].data.link">
+					<div class="title">{lang link}</div>
+					<div class="block-item link">
+						<span @click="MessageSearch('link',showdata[showdataindex].data.link)">{{showdata[showdataindex].data.link}}</span>
+						<i class="ri-file-copy-line" @click="MessageSearch('copy',showdata[path].data.link)"></i>
+					</div>
+				</div>
+				<div class="block" v-if="showdata[showdataindex].data.realfianllypath">
+					<div class="title">{lang fix_address}</div>
+					<div class="block-item link">
+						<span @click="MessageSearch('link',showdata[showdataindex].data.realfianllypath)">{{showdata[showdataindex].data.realfianllypath}}</span>
+						<i class="ri-file-copy-line" @click="MessageSearch('copy',showdata[showdataindex].data.realfianllypath)"></i>
+					</div>
+				</div>
+				<div class="block" v-if="showdata[showdataindex].data.foldernames && showdata[showdataindex].data.foldernames.length">
+					<div class="title">{lang classify}</div>
+					<div class="block-item tag">
+						<div class="tag" v-for="item in showdata[showdataindex].data.foldernames" @click="MessageSearch('classify',item.key)">{{item.val.fname}}</div>
+					</div>
+				</div>
+				<div class="block">
+					<div class="title">{lang basic_message}</div>
+					<div class="block-item">
+						<el-row class="basic">
+							<el-col :span="12">
+								<div class="label">{lang grade}</div>
+							</el-col>
+							<el-col :span="12">
+								<div class="record">
+									<i v-for="item in showdata[showdataindex].data.grade" class="el-icon-star-on star active"></i><i v-for="item in showdata[showdataindex].data.fgrade" class="el-icon-star-on star"></i>
+								</div>
+							</el-col>
+						</el-row>
+						<el-row class="basic">
+							<el-col :span="12">
+								<div class="label">{lang fs_username}</div>
+							</el-col>
+							<el-col :span="12">
+								<div class="record">{{showdata[showdataindex].data.username}}</div>
+							</el-col>
+						</el-row>
+						<el-row class="basic">
+							<el-col :span="12">
+								<div class="label">{lang size}</div>
+							</el-col>
+							<el-col :span="12">
+								<div class="record">{{showdata[showdataindex].data.width}}×{{showdata[showdataindex].data.height}}</div>
+							</el-col>
+						</el-row>
+						<el-row class="basic">
+							<el-col :span="12">
+								<div class="label">{lang file_size}</div>
+							</el-col>
+							<el-col :span="12">
+								<div class="record">{{showdata[showdataindex].data.fsize}}</div>
+							</el-col>
+						</el-row>
+						<el-row class="basic">
+							<el-col :span="12">
+								<div class="label">{lang type}</div>
+							</el-col>
+							<el-col :span="12">
+								<div class="record">{{showdata[showdataindex].data.ext}}</div>
+							</el-col>
+						</el-row>
+						<el-row class="basic">
+							<el-col :span="12">
+								<div class="label">{lang creation_time}</div>
+							</el-col>
+							<el-col :span="12">
+								<div class="record">{{showdata[showdataindex].data.mtime}}</div>
+							</el-col>
+						</el-row>
+						<el-row class="basic">
+							<el-col :span="12">
+								<div class="label">{lang add_time}</div>
+							</el-col>
+							<el-col :span="12">
+								<div class="record">{{showdata[showdataindex].data.btime}}</div>
+							</el-col>
+						</el-row>
+						<el-row class="basic">
+							<el-col :span="12">
+								<div class="label">{lang modify_time}</div>
+							</el-col>
+							<el-col :span="12">
+								<div class="record">{{showdata[showdataindex].data.dateline}}</div>
+							</el-col>
+						</el-row>
+					</div>
+				</div>
+			<!-- </template> -->
+		</div>
+
+	</div>
+</el-drawer>
+<script type="text/javascript">
+	var MessageMixin = {
+		methods:{
+			MessageSearch(type,val){
+				var self = this;
+				var item = self.showdata[self.showdataindex].data;
+				switch(type){
+					case 'color':
+						if(!self.DocumentHref)return false;
+						window.parent.location.href = self.DocumentHref + '&color=#' + val;
+						window.parent.location.reload();
+					break;
+					case 'tag':
+						if(!self.DocumentHref)return false;
+						window.parent.location.href = self.DocumentHref + '&tag=' + val;
+						window.parent.location.reload();
+					break;
+					case 'link':
+						window.open(val);
+					break;
+					case 'classify':
+						if(!self.DocumentHref)return false;
+						let fidname = sessionStorage.getItem('fidname');
+						if(!fidname){
+							fidname = 'fid';
+						}
+						window.parent.location.href = self.DocumentHref+ '&'+fidname+'=' + val;
+						window.parent.location.reload();
+					break;
+					case 'copy':
+						self.CommonCopyTxt(val);
+					break;
+				}
+				
+			},
+		}
+	};
+</script>

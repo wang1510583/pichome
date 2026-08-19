@@ -1,0 +1,657 @@
+<!--{template common/container/pc/header_start}-->
+<link rel="stylesheet" href="static/scss/default/index.css?{VERHASH}">
+<script type="text/javascript" src="dzz/pichome/template/librarylist/assets/js/common.js?{VERHASH}"></script>
+<!-- spark-md5.js 库-->
+<script type="text/javascript" src="dzz/pichome/template/librarylist/assets/js/spark-md5.min.js?{VERHASH}"></script>
+<script type="text/javascript" src="static/vue_components/HeaderSort/index.js?{VERHASH}"></script>
+<!-- 对象存储上传sdk及上传js-->
+{hook cloudupload}
+<script type="text/javascript" src="static/vue_components/screen/index.js?{VERHASH}"></script>
+<script type="text/javascript" src="static/vue_components/ImageFile/index.js?{VERHASH}"></script>
+<script type="text/javascript" src="static/vue_components/ImageLayout/index.js?{VERHASH}"></script>
+<script type="text/javascript" src="static/vue_components/collectdialog/index.js?{VERHASH}"></script>
+<link rel="stylesheet" type="text/css" href="dzz/pichome/template/librarylist/pc/assets/css/index.css?{VERHASH}"/>
+<link rel="stylesheet" type="text/css" href="dzz/pichome/template/librarylist/pc/assets/css/files.css?{VERHASH}"/>
+<link rel="stylesheet" type="text/css" href="static/scss/layout.css?{VERHASH}"/>
+<script type="text/javascript" src="static/vue_components/locale/index.js?{VERHASH}"></script>
+<script type="text/javascript" src="dzz/pichome/template/librarylist/pc/assets/js/marked.min.js?{VERHASH}"></script>
+<script type="text/javascript" src="dzz/pichome/template/librarylist/pc/assets/js/marked.min.js?{VERHASH}"></script>
+<script type="text/javascript" src="static/js/sortable.min.js?{VERHASH}"></script>
+<script type="text/javascript" src="static/jszip/jszip.min.js?{VERHASH}"></script>
+<script type="text/javascript" src="static/jszip/FileSaver.min.js?{VERHASH}"></script>
+<style>
+	.ImageRightMenu{
+		z-index: 9000 !important;
+	}
+	.mobile-sidebar-mask {
+		display: none;
+	}
+	.mobile-sidebar-toggle {
+		display: none;
+	}
+	@media (max-width: 768px) {
+		/* The upload popover is 780px wide on desktop. Present it as a
+		   viewport-bound bottom sheet on phones so no controls are clipped. */
+		body .uploaderdrawermodal {
+			position: fixed !important;
+			left: 8px !important;
+			right: 8px !important;
+			top: auto !important;
+			bottom: max(8px, env(safe-area-inset-bottom)) !important;
+			width: auto !important;
+			max-width: none !important;
+			max-height: calc(100vh - 76px) !important;
+			max-height: calc(100dvh - 76px - env(safe-area-inset-bottom)) !important;
+			margin: 0 !important;
+			padding: 12px !important;
+			box-sizing: border-box;
+			overflow: hidden;
+			border-radius: 16px;
+			transform: none !important;
+			z-index: 4002 !important;
+		}
+		body .uploaderdrawermodal > .el-container,
+		body .uploaderdrawermodal > .el-container > .el-container {
+			width: 100%;
+			min-width: 0;
+			max-height: calc(100vh - 100px);
+			max-height: calc(100dvh - 100px - env(safe-area-inset-bottom));
+		}
+		body .uploaderdrawermodal > .el-container > .el-container {
+			flex-direction: column;
+			overflow: hidden;
+		}
+		body .uploaderdrawermodal > .el-container > .el-container > .el-aside {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+			width: 100% !important;
+			padding: 0 0 10px !important;
+			border-right: 0 !important;
+			border-bottom: 1px solid var(--el-border-color);
+			box-sizing: border-box;
+			overflow: visible;
+		}
+		body .uploaderdrawermodal > .el-container > .el-container > .el-aside .el-button {
+			min-width: 0;
+			margin: 0 !important;
+		}
+		body .uploaderdrawermodal > .el-container > .el-container > .el-container {
+			min-width: 0;
+			min-height: 0;
+			overflow: hidden;
+		}
+		body .uploaderdrawermodal .el-header {
+			gap: 8px;
+			padding: 0 4px !important;
+		}
+		body .uploaderdrawermodal .el-header > div {
+			min-width: 0;
+			overflow: hidden;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+		}
+		body .uploaderdrawermodal .el-main {
+			min-width: 0;
+			padding: 0 !important;
+			overflow: auto;
+			overscroll-behavior: contain;
+			-webkit-overflow-scrolling: touch;
+		}
+		body .uploaderdrawermodal .el-table {
+			height: min(350px, calc(100vh - 210px)) !important;
+			height: min(350px, calc(100dvh - 210px - env(safe-area-inset-bottom))) !important;
+		}
+		body .uploaderdrawermodal .el-popper__arrow {
+			display: none;
+		}
+		.library-body {
+			position: relative;
+			width: 100%;
+			min-width: 0;
+		}
+		.library-body > .el-container {
+			width: 100%;
+			min-width: 0;
+			flex: 1 1 100%;
+		}
+		.library-body > .el-container > .el-header {
+			min-width: 0;
+		}
+		#top_header {
+			gap: 6px;
+			padding-left: 8px;
+			padding-right: 8px;
+		}
+		#top_header .h-left {
+			width: 36px !important;
+			min-width: 36px;
+			padding-right: 0 !important;
+		}
+		#top_header .h-left > .el-link:last-child {
+			display: none;
+		}
+		#top_header .h-center {
+			min-width: 0;
+			padding: 0 2px;
+		}
+		#top_header .h-center .headerkeyword {
+			width: 100% !important;
+		}
+		.library-body .mobile-sidebar {
+			display: flex !important;
+			position: fixed !important;
+			top: 60px;
+			bottom: 0;
+			height: calc(100dvh - 60px);
+			width: var(--mobile-sidebar-width) !important;
+			max-width: calc(100vw - 44px);
+			z-index: 3000;
+			contain: layout paint;
+			will-change: transform;
+			transition: transform .28s cubic-bezier(.22, 1, .36, 1);
+			box-shadow: 0 8px 28px rgba(0, 0, 0, .22);
+		}
+		.library-body .mobile-sidebar.page-left {
+			left: 0;
+			right: auto;
+			transform: translate3d(-105%, 0, 0);
+		}
+		.library-body .mobile-sidebar.mainRight {
+			left: auto;
+			right: 0;
+			transform: translate3d(105%, 0, 0);
+		}
+		.library-body .mobile-sidebar.mobile-open {
+			transform: translate3d(0, 0, 0);
+		}
+		.library-body .mobile-sidebar > div[style*="cursor: col-resize"] {
+			display: none !important;
+		}
+		.mobile-sidebar-mask {
+			display: block;
+			position: fixed;
+			inset: 60px 0 0;
+			z-index: 2999;
+			background: rgba(0, 0, 0, .24);
+			backdrop-filter: blur(1.5px);
+			-webkit-backdrop-filter: blur(1.5px);
+		}
+		.mobile-sidebar-toggle {
+			display: flex;
+			position: fixed;
+			top: calc(50% + 30px);
+			width: 30px;
+			height: 56px;
+			padding: 0;
+			align-items: center;
+			justify-content: center;
+			z-index: 3001;
+			border: 1px solid var(--el-border-color);
+			background: color-mix(in srgb, var(--el-bg-color) 88%, transparent);
+			color: var(--el-text-color-primary);
+			box-shadow: 0 3px 12px rgba(0, 0, 0, .18);
+			backdrop-filter: blur(14px) saturate(150%);
+			-webkit-backdrop-filter: blur(14px) saturate(150%);
+			transform: translateY(-50%);
+			will-change: left, right;
+			transition: left .28s cubic-bezier(.22, 1, .36, 1), right .28s cubic-bezier(.22, 1, .36, 1), background-color .12s ease, color .12s ease;
+			-webkit-tap-highlight-color: transparent;
+			touch-action: manipulation;
+		}
+		.mobile-sidebar-toggle:active {
+			background: var(--el-fill-color-darker);
+		}
+		.mobile-sidebar-toggle:focus-visible {
+			outline: 2px solid var(--el-color-primary);
+			outline-offset: 2px;
+		}
+		.mobile-sidebar-toggle.left {
+			left: 0;
+			border-left: 0;
+			border-radius: 0 12px 12px 0;
+		}
+		.mobile-sidebar-toggle.left.mobile-open {
+			left: min(var(--mobile-sidebar-width), calc(100vw - 44px));
+		}
+		.mobile-sidebar-toggle.right {
+			right: 0;
+			border-right: 0;
+			border-radius: 12px 0 0 12px;
+		}
+		.mobile-sidebar-toggle.right.mobile-open {
+			right: min(var(--mobile-sidebar-width), calc(100vw - 44px));
+		}
+	}
+	@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+		.library-body .mobile-sidebar,
+		.mobile-sidebar-toggle {
+			transition-duration: .01ms !important;
+		}
+	}
+	@media (max-width: 768px) and (prefers-reduced-transparency: reduce),
+	       (max-width: 768px) and (prefers-contrast: more) {
+		.mobile-sidebar-mask {
+			backdrop-filter: none;
+			-webkit-backdrop-filter: none;
+			background: rgba(0, 0, 0, .38);
+		}
+		.mobile-sidebar-toggle {
+			background: var(--el-bg-color);
+			backdrop-filter: none;
+			-webkit-backdrop-filter: none;
+		}
+	}
+</style>
+
+<!--{template common/container/pc/header_end}-->
+<div id="dzzoffice">
+	<el-container>
+		<el-header class="page-header" id="top_header" height="60px">
+			<!--{template librarylist/pc/components/index/header/index}-->
+		</el-header>
+		<el-container class="library-body" :style="{'--mobile-sidebar-width': MobileSidebarWidth+'px'}">
+			<div v-if="!ispc && (MobileSidebar.left || MobileSidebar.right)" class="mobile-sidebar-mask" aria-hidden="true" @click="MobileSidebarClose"></div>
+			<el-aside id="pichome-left-sidebar" class="page-left" :class="{'mobile-sidebar':!ispc,'mobile-open':!ispc && MobileSidebar.left}" :width="(ispc?LeftWidth:MobileSidebarWidth)+'px'" v-show="HeaderRightBtnShow.column.indexOf('left')>-1">
+				<!--{template librarylist/pc/components/left/index}-->
+			</el-aside>
+			<button
+				v-if="!ispc && HeaderRightBtnShow.column.indexOf('left')>-1"
+				type="button"
+				class="mobile-sidebar-toggle left"
+				:class="{'mobile-open':MobileSidebar.left}"
+				:aria-expanded="String(MobileSidebar.left)"
+				aria-controls="pichome-left-sidebar"
+				aria-label="切换左侧栏"
+				title="显示或隐藏分类侧栏"
+				@click.stop="MobileSidebarToggle('left')">
+				<el-icon>
+					<template v-if="MobileSidebar.left"><Arrow-Left></Arrow-Left></template>
+					<template v-else><Arrow-Right></Arrow-Right></template>
+				</el-icon>
+			</button>
+			<el-container>
+				<el-header v-show="Screenshow" height="50px" style="padding: 0px 8px;padding-bottom: 4px;position: relative;">
+					<dzz-screen
+						ref="ScreenBoxRef"
+						:resize="DocumentResize"
+						:props="ScreenProps"
+						:headerkeyword="HeaderKeyword"
+						:defaultparam="ScreenParam"
+						@submit="CommonGetImageData"
+						@visible="handleDocumentOverlay"
+						:appid="DocumentAppid"
+						:hassub="hassub">
+					</dzz-screen>
+					<div v-if="DocumentOverlay.screen" class="el-overlay dzz-overlay" style="z-index: 1001;background: transparent;"></div>
+				</el-header>
+				<el-main 
+					class="dzz-container" 
+					style="overflow: hidden;padding: 0;position: relative;" 
+					ref="onloadCon">
+					<el-scrollbar id="main_scrollbar" class="main_scrollbar" ref="MainscrollbarRef" @scroll="HandleElScrollbar"  v-loading="main_scrollbar_loading">
+						<div 
+							v-show="DocumentDropActive"
+							class="drag-upload el-upload-dragger is-dragover"
+							style="position: absolute;left: 0;top: 0;width: 100%;height: 100%;display: flex;justify-content: center;align-items: center;z-index: 7000;background: rgb(64,158,255,0.4);">
+							<div class="el-upload__text" style="color: #FFFFFF;font-size: 26px;">{lang drag_file_to_here}</div>
+						</div>
+						<!--{template librarylist/pc/components/index/file}-->
+						<!--{template librarylist/pc/components/index/image}-->
+						<div class="right-toolbar">
+							<!--{template librarylist/pc/components/index/upload}-->
+							<el-backtop target=".main_scrollbar>.el-scrollbar__wrap" style="position: unset;margin-top: 10px;"></el-backtop>
+						</div>
+					</el-scrollbar>
+					<div v-if="DocumentOverlay.main" class="el-overlay dzz-overlay" style="z-index: 1001;background: transparent;"></div>
+				</el-main>
+			</el-container>
+			<el-aside id="pichome-right-sidebar" class="mainRight" :class="{'mobile-sidebar':!ispc,'mobile-open':!ispc && MobileSidebar.right}" style="overflow: hidden;" :width="(ispc?RightWidth:MobileSidebarWidth)+'px'"  v-show="HeaderRightBtnShow.column.indexOf('right')>-1">
+				<!--{template librarylist/pc/components/right/index}-->
+			</el-aside>
+			<button
+				v-if="!ispc && HeaderRightBtnShow.column.indexOf('right')>-1"
+				type="button"
+				class="mobile-sidebar-toggle right"
+				:class="{'mobile-open':MobileSidebar.right}"
+				:aria-expanded="String(MobileSidebar.right)"
+				aria-controls="pichome-right-sidebar"
+				aria-label="切换右侧栏"
+				title="显示或隐藏详情侧栏"
+				@click.stop="MobileSidebarToggle('right')">
+				<el-icon>
+					<template v-if="MobileSidebar.right"><Arrow-Right></Arrow-Right></template>
+					<template v-else><Arrow-Left></Arrow-Left></template>
+				</el-icon>
+			</button>
+			
+		</el-container>
+		
+	</el-container>
+	
+	<!--{template librarylist/pc/components/left/Jsindex}-->
+	<!--{template librarylist/pc/components/right/Jsindex}-->
+	<!--{template librarylist/pc/components/index/screen/Jsindex}-->
+	<!--{template librarylist/pc/components/index/common}-->
+	<!--{template librarylist/pc/components/index/contextmenu}-->
+	<!--{if $_G['setting']['defaultspacesetting']['bz']=='dzz'}-->
+	<!--{template librarylist/pc/components/index/uploaddzz}-->
+	<!--{elseif $_G['setting']['defaultspacesetting']['bz']=='QCOS'}-->
+	<!--{template librarylist/pc/components/index/uploadQCOS}-->
+	<!--{/if}-->
+    <!--分享对话框加载-->
+	<!--{eval  include template('shareAddDialog','./dzz/shares/template/')}-->
+</div>
+<script>
+	function tabgroup_callback(data,flag){
+		dzzoffice.WindowThis.RightTabGroup(data,flag)
+	}
+	function lefttabgroup_callback(data,flag){
+		dzzoffice.WindowThis.LeftTabGroup(data,flag)
+	}
+	const { createApp, reactive, toRefs, toRef, ref, onMounted, nextTick, watch, computed, onBeforeUpdate } = Vue;
+	var dzzoffice = createApp({
+		data(){
+			return {
+				DocumentOverlay:{
+					left:false,
+					screen:false,
+					main:false,
+					right:false
+				},
+				fMOD_URL:MOD_URL,
+				DocumentResize:0,
+				DocumentAppid:'',
+				DocumentCtrl:false,
+				DocumentDropActive:false,
+				DocumentDropActive1:false,
+				OpenDetailType:'new',
+				scrollref:null,
+				DocumentThemeColor:'',//dark
+				DocumentVapp:{appname:'',type:0},
+				ispc:window.innerWidth > 768,
+				MobileSidebar:{left:false,right:false},
+				MobileSidebarWidth:Math.max(260, Math.min(320, window.innerWidth - 44)),
+				main_scrollbar_loading:false
+			}
+		},
+		watch: {
+			DocumentThemeColor:{
+				handler(newval){
+					document.querySelector('html').className = newval
+				},
+				deep:true,
+				// immediate:true
+			},
+			'ImageIcon.data':{
+				handler(newval){
+					this.ImageGetThumb();
+				},
+				deep:true
+			}
+		},
+		created(){
+			this.handleIsPc();
+			<!--{if $_GET['do'] == 'tags' ||  $_GET['do'] == 'user'}-->
+			this.DocumentAppid = '$appid';
+			<!--{else}-->
+			this.DocumentAppid = this.CommonGetHashParam('appid');
+			if(this.DocumentAppid){
+				this.ScreenParam.appid = this.DocumentAppid;
+				var ShowScreen = sessionStorage.getItem('showscreen')? sessionStorage.getItem('showscreen'):1;
+				if(parseInt(ShowScreen)){
+					this.Screenshow = true;
+				}else{
+					this.Screenshow = false;
+				}
+			}
+			<!--{/if}-->
+		},
+		
+		mixins:[leftMixins,HeaderMixins,ScreenMixin,CommonMixin,MixinImage,UploaderMinxins,RightMixin,MainMixins,FileMixins,Upload{$_G['setting']['defaultspacesetting']['bz']}Minxins,ShareAddDialogMixin],
+		
+		methods:{
+			DocumentPageContentNotChecked(){
+				if(this.RightType == 'folder'){
+					if(this.RightActivefid[0] != this.LeftTree.Currentkey){
+						this.RightParamClean();
+						this.RightType = 'folder';
+						this.RightActivefid = [this.LeftTree.Currentkey];
+						this.RightGetData();
+					}
+				}else if(this.RightType == 'file'){
+					this.RightParamClean();
+					if(this.LeftCurrenType == 'filelist'){
+						this.RightType = 'folder';
+						this.RightActivefid = [this.LeftTree.Currentkey];
+						
+					}else{
+						this.RightType = JSON.parse(JSON.stringify(this.LeftCurrenType));
+					}
+					this.RightGetData();
+				}
+			},
+			async ImageUploadDropEvent(e) {
+				const self = this;
+				if(this.LeftCurrenType == 'recycle' || ![0,3].includes(parseInt(this.DocumentVapp.type))){
+					return false;
+				}
+				e.preventDefault();
+				const dataTransfer = e.dataTransfer;
+
+				if(dataTransfer.items && dataTransfer.items.length){
+					
+					for (let index = 0; index < dataTransfer.items.length; index++) {
+						const element = dataTransfer.items[index];
+						const folder = element.webkitGetAsEntry();
+						if (folder && folder.isDirectory && parseInt(this.DocumentVapp.type) == 3) {
+							readFolder(folder).then(files=>{
+								this.UploadFileChange(files,'drop');
+							});
+						}else{
+							if(element.getAsFile()){
+								this.UploadChange([element.getAsFile()],'drop');
+							}
+							
+						}
+					}
+				}
+			
+				this.DocumentDropActive = false;
+				async function readFolder(folder) {
+					const files = [];
+					const reader = folder.createReader();
+					while(true) {
+						const entries = await new Promise(resolve => {
+							reader.readEntries(resolve); 
+						});
+						
+						if(!entries.length) break;
+						const promises = entries.map(async item => {
+							if(item.isFile) {
+								let entry = await doSomethingAsync(item);
+								files.push(entry); // 获取文件对象
+							} else if(item.isDirectory) {
+								files.push(...await readFolder(item)); // 递归读取子文件夹
+							}
+						});
+
+						// 并发执行所有promise
+						await Promise.all(promises);
+					}
+					
+					return files;
+				}
+				async function doSomethingAsync(entry) {
+					let data = '';
+					let promises = await new Promise(resolve => {
+						entry.file(file => {
+							let rawurl = entry.fullPath;
+							rawurl = rawurl.substr(rawurl.indexOf('/') + 1);
+							file['fullPath'] = rawurl;
+							// 获取文件成功  
+							resolve(file)
+						}, error => {
+						// 获取文件失败
+							console.log('{lang get_data_fail}');
+						});
+					});
+					return promises;
+				}
+			},
+			HandleElScrollbar(){
+				var self = this;
+				self.$refs.RefImageLayout.HandleElScrollbar();
+			},
+			DocumentThemeChange(){
+				if(this.DocumentThemeColor=='light'){
+					this.DocumentThemeColor='dark';
+					localStorage.setItem('theme','dark');
+				}else{
+					this.DocumentThemeColor='light';
+					localStorage.setItem('theme','light');
+				}
+			},
+			DocumentHideAllPop(){
+				const self = this;
+				//左侧树隐藏
+				self.LeftTreePopover.show = false;
+				//筛选隐藏
+				if(self.$refs.ScreenBoxRef){
+					self.$refs.ScreenBoxRef.hidePopover();
+				}
+				//文件隐藏
+				self.fileMunu.show = false;
+				//图片隐藏
+				self.ImageMenu.show = false;
+				//筛选隐藏
+				if(self.$refs.cameraPopover){
+					self.$refs.cameraPopover.hide();
+				}
+				
+				
+			},
+			handleIsPc(){
+                let innerWidth = window.innerWidth;
+                if(innerWidth > 768){
+                    this.ispc = true;
+					this.MobileSidebar.left = false;
+					this.MobileSidebar.right = false;
+                }else{
+                    this.ispc = false;
+					this.MobileSidebarWidth = Math.max(260, Math.min(320, innerWidth - 44));
+                }
+            },
+			MobileSidebarToggle(side){
+				const next = !this.MobileSidebar[side];
+				this.MobileSidebar.left = false;
+				this.MobileSidebar.right = false;
+				this.MobileSidebar[side] = next;
+			},
+			MobileSidebarClose(){
+				this.MobileSidebar.left = false;
+				this.MobileSidebar.right = false;
+			},
+			handleDocumentOverlay(status,type){
+				for (const key in this.DocumentOverlay) {
+					this.DocumentOverlay[key] = status;
+				}
+				if(this.DocumentOverlay[type]){
+					this.DocumentOverlay[type] = false;
+				}
+			}
+		},
+		components: {
+		},
+		mounted(){
+			var self = this;
+			<!--{if $_GET['do'] == 'tags' ||  $_GET['do'] == 'user'}-->
+			<!--{else}-->
+			if(this.DocumentAppid){
+				this.HeaderRightBtnCreate()
+				// this.CommonGetImageData();
+				this.CommonInit();
+			}
+			<!--{/if}-->
+						// 
+			this.scrollref = self.$refs.MainscrollbarRef;
+			window.onresize = function(){
+				self.DocumentResize += 1;
+				self.handleIsPc();
+			};
+
+			const dropArea = document.querySelector('.dzz-container');
+			dropArea.addEventListener("drop", self.ImageUploadDropEvent, false);
+			dropArea.addEventListener("dragover", function(e){
+				if(self.LeftCurrenType == 'recycle' || ![0,3].includes(parseInt(self.DocumentVapp.type))){
+					return false;
+				}
+				// e.dataTransfer.dropEffect = 'copy';
+				e.stopPropagation();
+				e.preventDefault();
+				self.DocumentDropActive = true;
+			}, false);
+			document.addEventListener("dragleave", function(e){
+				if(self.LeftCurrenType == 'recycle' || ![0,3].includes(parseInt(self.DocumentVapp.type))){
+					return false;
+				}
+				e.stopPropagation()
+				e.preventDefault()
+				var dropbox = e.target.closest('.dzz-container');
+				if(!dropbox){
+					self.DocumentDropActive = false;
+				}
+			}, false);
+			document.addEventListener('keydown', (e) => {
+				if(e.key === 'Escape' && !self.ispc && (self.MobileSidebar.left || self.MobileSidebar.right)){
+					self.MobileSidebarClose();
+					return;
+				}
+				if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+					if(!self.searchImagePropover)return false;
+					// 确保页面已加载完成
+
+					setTimeout(() => {
+						// 获取剪贴板内容
+						if (window.isSecureContext && navigator.clipboard) {
+							navigator.clipboard.read().then(clipboardItems => {
+								for (const clipboardItem of clipboardItems) {
+									for (const type of clipboardItem.types) {
+										if (type.startsWith('image/')) {
+											clipboardItem.getType(type).then(blob => {
+												// 处理图片文件...
+												self.SearchUploadChange({raw: blob})
+											});
+										}
+									}
+								}
+							});
+						}
+					}, 100);
+				}
+			});
+			dzzoffice.WindowThis = this;
+		}
+	});
+	dzzoffice.use(ElementPlus, {
+		<!--{if $_G['language']=='zh-CN'}-->
+		locale: {$_G['language_list'][$_G['language']]['elementflagCamel']},
+		<!--{/if}-->
+	});
+
+	for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+		dzzoffice.component(key, component)
+	}
+	// 屏蔽警告信息
+	dzzoffice.config.warnHandler = function(){return null};
+	dzzoffice.use(DzzScreen);
+	dzzoffice.component('comavatar', comavatar);
+	dzzoffice.component('international',international);
+	dzzoffice.use(ImageLayout);
+	dzzoffice.use(DzzCollectdialog);
+	dzzoffice.use(ImageFile);
+	dzzoffice.component('language',language);
+	dzzoffice.component('comsort', comsort);
+	dzzoffice.mount('#dzzoffice');
+</script>
+<!--{template common/container/pc/footer}-->

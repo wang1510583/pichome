@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pichome_green">#0B8F78</color>
+    <color name="pichome_surface">#F8F9FA</color>
+    <color name="pichome_status">#303135</color>
+</resources>

@@ -1,0 +1,44 @@
+plugins {
+    id "com.android.application"
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+def pichomeAppAccessTag = localProperties.getProperty("pichome.appAccessTag", "")
+
+android {
+    namespace "top.lempet.pichome"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "top.lempet.pichome"
+        minSdk 24
+        targetSdk 35
+        versionCode 11
+        versionName "1.0.10"
+        buildConfigField "String", "PICHOME_APP_ACCESS_TAG", "\"${pichomeAppAccessTag}\""
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}

@@ -1,0 +1,59 @@
+
+<template v-if="!showdata[showdataindex].loading">
+	<div class="footer-tabbar-item" v-if="showdata[showdataindex].data.link" @click="FooterClick('link')">
+		<el-icon><Position /></el-icon>
+	</div>
+	<div class="footer-tabbar-item" v-if="showdata[showdataindex].data.download" @click="FooterClick('download')">
+		<el-icon><Download /></el-icon>
+	</div>
+	<div class="footer-tabbar-item" v-if="showdata[showdataindex].data.share" @click="FooterClick('share')">
+		<el-icon><Share /></el-icon>
+	</div>
+</template>
+<script type="text/javascript">
+	var FooterMixin = {
+		methods:{
+			FooterClick(type){
+				var self = this;
+				var path = self.path;
+				if(!self.showdata[self.showdataindex]){
+					ElMessage.error('{lang parameter_error}');
+					return false;
+				}
+				if(type == 'link'){
+					window.open(self.showdata[self.showdataindex].data.link);
+					return false;
+				}
+
+				if(type == 'download'){
+					if(this.previews.data && this.previews.data.length && this.previews.active > 0){
+						if(self.isadmin){
+							window.open('index.php?mod=pichome&op=download&dpath=' + this.previews.data[this.previews.active].dpath);
+						}else{
+							window.open('index.php?mod=banner&op=download&dpath=' + this.previews.data[this.previews.active].dpath);
+						}
+					}else{
+						if (self.showdata[self.showdataindex].data.dpath) {
+
+							if(self.isadmin){
+								window.open('index.php?mod=pichome&op=download&dpath=' + self.showdata[self.showdataindex].data.dpath);
+							}else{
+								window.open('index.php?mod=banner&op=download&dpath=' + self.showdata[self.showdataindex].data.dpath);
+							}
+						} else {
+							ElMessage.error('{lang data_error}');
+						}
+					}
+					return false;
+				}
+				if(type == 'share'){
+					let self = this;
+					self.shareDialog.filepaths=[self.showdata[this.showdataindex].data.rid];
+					self.shareDialog.sperm=self.showdata[this.showdataindex].data.perm;
+					self.shareDialog.stype=0;
+					self.shareDialog.visible=true;
+				}
+			},
+		}
+	};
+</script>

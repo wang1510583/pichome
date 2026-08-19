@@ -1,0 +1,171 @@
+<div style="padding: 16px 20px;background: var(--el-bg-color);padding-top: 0;border: var(--el-border);border-radius: 12px;margin-top: 20px;">
+    <div style="padding: 20px 0;text-align: center;">
+        <el-text tag="b" size="large">{lang bottom_menu}</el-text>
+    </div>
+    <ul class="table_header">
+        <li class="cell flex" style="min-width: 120px;">{lang name}</li>
+        <li class="cell" style="min-width: 200px;">{lang data_source}</li>
+        <li class="cell" style="min-width: 80px;text-align: center;">{lang status}</li>
+        <li class="cell" style="min-width: 230px;text-align: center;">{lang operation}</li>
+    </ul>
+    <el-tree 
+        class="table-tree" 
+        :data="treeData.bottom" 
+        draggable
+        default-expand-all
+        node-key="id"
+        :props="treeProp"
+        @node-drop="TreeDrop">
+        <template #default="{ node, data }">
+            <div class="cell flex" style="padding-left: 0;min-width: 120px;">
+                <div class="name">
+                    <el-image 
+                    style="min-width: 23px;width:23px; height: 23px;margin-right: 6px;border-radius: var(--el-border-radius-base);" 
+                    :src="data.icon" 
+                    fit="cover" >
+                        <template #error><div class="el-image__placeholder"></div></template>
+                    </el-image>
+                    <el-text class="el-tree-node__label" truncated>{{ node.label }}</el-text>
+                </div>
+                <div class="btn">
+                    <el-button 
+                    plain
+                    @click.stop="OperationTree('sibling',node,'bottom')"
+                    icon="plus">{lang Create_peer}</el-button>
+                <el-button
+                    plain
+                    icon="plus"
+                    @click.stop="OperationTree('child',node,'bottom')">{lang Create_Child}</el-button>
+                </div>
+            </div>
+            <div class="cell" style="min-width: 200px;">
+                <el-text truncated style="display: flex;align-items: center;height: 100%;">
+                    <template v-if="data.btype == 0">
+                        <el-icon style="font-size: 13px;margin-right: 5px;">
+                            <svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M959.9972 831.9948c0 125.055218-233.59854 191.9988-451.709177 191.9988h8.127949a30.719808 30.719808 0 0 1-0.703995 0h-7.423954a30.719808 30.719808 0 0 1-0.639996 0h8.06395C297.53734 1023.9936 64.0028 957.050018 64.0028 831.9948V210.878682c0-59.775626 49.919688-113.66329 141.439116-151.551053C287.361404 25.791839 396.928719 6.847957 512 6.847957c216.318648 0 447.9972 71.423554 447.9972 204.030725l-0.064 0.639996z m-63.9996-198.526759c-84.415472 54.39966-239.614502 83.327479-387.709577 83.327479h8.191949-8.959944 8.191949c-148.095074 0-303.358104-28.927819-387.709577-83.327479V831.9948c0 62.911607 162.174986 130.751183 383.9976 131.519178 221.886613-0.767995 383.9976-68.671571 383.9976-131.519178z m-77.439516-270.974307c-83.19948 35.007781-191.422804 53.951663-306.558084 53.951663-146.559084 0-300.158124-32.831795-383.9976-95.679402l-0.064 231.038556c21.055868 53.951663 177.790889 109.055318 384.0616 109.695315 206.270711-0.639996 363.005731-55.679652 384.0616-109.631315l-0.128-232.318548a351.677802 351.677802 0 0 1-77.439516 42.943731zM512 69.503566c-221.886613 0-383.9976 74.367535-383.9976 141.439116 0 67.007581 162.110987 141.375116 383.9976 141.375116 220.990619 0 382.717608-73.023544 383.9976-139.839126v-0.831995-0.319998c0-66.751583-162.110987-141.823114-383.9976-141.823113z" ></path></svg>
+                        </el-icon>
+                        {{ data.soucresname }}
+                    </template>
+                    <template v-else-if="data.btype == 1">
+                        <el-icon style="font-size: var(--el-font-size-medium);margin-right: 5px;">
+                            <svg viewBox="0 0 1041 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M511.500488 63.937561c33.104671 0 59.941463 26.836792 59.941463 59.941463 0 21.351149-11.163099 40.094845-27.971684 50.713476L543.469268 255.750244h287.719025c17.655758 0 31.96878 14.313022 31.96878 31.96878v575.438049c0 17.655758-14.313022 31.96878-31.96878 31.968781H191.812683c-17.655758 0-31.96878-14.313022-31.968781-31.968781V287.719024c0-17.655758 14.313022-31.96878 31.968781-31.96878h287.719024v-81.157744c-16.548839-10.452792-27.625022-28.781893-27.96469-49.721444L451.559024 123.879024c0-33.104671 26.836792-59.941463 59.941464-59.941463z m279.726829 263.742439H231.773659v495.516098h559.453658V327.68zM631.383415 672.343415a7.992195 7.992195 0 0 1 7.992195 7.992195v47.95317a7.992195 7.992195 0 0 1-7.992195 7.992196H391.617561a7.992195 7.992195 0 0 1-7.992195-7.992196v-47.95317a7.992195 7.992195 0 0 1 7.992195-7.992195h239.765854zM119.882927 399.609756a7.992195 7.992195 0 0 1 7.992195 7.992195v303.703415a7.992195 7.992195 0 0 1-7.992195 7.992195H71.929756a7.992195 7.992195 0 0 1-7.992195-7.992195V407.601951a7.992195 7.992195 0 0 1 7.992195-7.992195h47.953171z m831.188293 0a7.992195 7.992195 0 0 1 7.992195 7.992195v303.703415a7.992195 7.992195 0 0 1-7.992195 7.992195h-47.953171a7.992195 7.992195 0 0 1-7.992195-7.992195V407.601951a7.992195 7.992195 0 0 1 7.992195-7.992195h47.953171z m-607.40683 63.937561c30.897826 0 55.945366 25.04754 55.945366 55.945366s-25.04754 55.945366-55.945366 55.945366-55.945366-25.04754-55.945366-55.945366 25.04754-55.945366 55.945366-55.945366z m335.672195 0c30.897826 0 55.945366 25.04754 55.945366 55.945366s-25.04754 55.945366-55.945366 55.945366-55.945366-25.04754-55.945365-55.945366 25.04754-55.945366 55.945365-55.945366z" fill="currentColor"></path></svg>
+                        </el-icon>
+                        {{ data.soucresname }}
+                    </template>
+                    <template v-else-if="data.btype == 2">
+                        <el-icon style="font-size: var(--el-font-size-medium);margin-right: 5px;"><Tickets /></el-icon>
+                        {{ data.soucresname }}
+                    </template>
+                    <template v-else-if="data.btype == 3">
+                        <el-tooltip
+                            effect="dark"
+                            :content="data.soucresname"
+                            placement="top">
+                            <div style="display: flex;align-items: center;height: 100%;">
+                                <el-icon style="font-size: var(--el-font-size-medium);margin-right: 5px;">
+                                    <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" data-v-ea893728=""><path fill="currentColor" d="M715.648 625.152 670.4 579.904l90.496-90.56c75.008-74.944 85.12-186.368 22.656-248.896-62.528-62.464-173.952-52.352-248.96 22.656L444.16 353.6l-45.248-45.248 90.496-90.496c100.032-99.968 251.968-110.08 339.456-22.656 87.488 87.488 77.312 239.424-22.656 339.456l-90.496 90.496zm-90.496 90.496-90.496 90.496C434.624 906.112 282.688 916.224 195.2 828.8c-87.488-87.488-77.312-239.424 22.656-339.456l90.496-90.496 45.248 45.248-90.496 90.56c-75.008 74.944-85.12 186.368-22.656 248.896 62.528 62.464 173.952 52.352 248.96-22.656l90.496-90.496 45.248 45.248zm0-362.048 45.248 45.248L398.848 670.4 353.6 625.152 625.152 353.6z"></path></svg>
+                                </el-icon>
+                                {lang link}
+                            </div>
+                        </el-tooltip>
+                    </template>
+                    <template v-else-if="data.btype == 4">
+                        <el-icon style="font-size: var(--el-font-size-medium);margin-right: 5px;">
+                            <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 40V19C6 17.8954 6.89543 17 8 17H15C16.1046 17 17 17.8954 17 19V29C17 30.1046 17.8954 31 19 31H29C30.1046 31 31 31.8954 31 33V40C31 41.1046 30.1046 42 29 42H8C6.89543 42 6 41.1046 6 40Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/>
+                                <path d="M42 8V29C42 30.1046 41.1046 31 40 31H33C31.8954 31 31 30.1046 31 29V19C31 17.8954 30.1046 17 29 17H19C17.8954 17 17 16.1046 17 15V8C17 6.89543 17.8954 6 19 6H40C41.1046 6 42 6.89543 42 8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/>
+                            </svg>
+                        </el-icon>
+                        {{ data.soucresname }}
+                    </template>
+                    <template v-else-if="data.btype == 6">
+                        <template v-if="parseInt(data.ptype) == 0">
+                            <!-- 全部 -->
+                            <el-icon style="font-size: 20px;vertical-align: text-bottom;margin-right:5px;">
+                                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6H8C6.89543 6 6 6.89543 6 8V18C6 19.1046 6.89543 20 8 20H18C19.1046 20 20 19.1046 20 18V8C20 6.89543 19.1046 6 18 6Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 28H8C6.89543 28 6 28.8954 6 30V40C6 41.1046 6.89543 42 8 42H18C19.1046 42 20 41.1046 20 40V30C20 28.8954 19.1046 28 18 28Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M40 6H30C28.8954 6 28 6.89543 28 8V18C28 19.1046 28.8954 20 30 20H40C41.1046 20 42 19.1046 42 18V8C42 6.89543 41.1046 6 40 6Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M40 28H30C28.8954 28 28 28.8954 28 30V40C28 41.1046 28.8954 42 30 42H40C41.1046 42 42 41.1046 42 40V30C42 28.8954 41.1046 28 40 28Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
+                            </el-icon>
+                        </template>
+                        <template v-else-if="parseInt(data.ptype) == 1">
+                            <!-- 单文件 -->
+                            <el-icon style="font-size: 20px;vertical-align: text-bottom;margin-right:5px;"><Document /></el-icon>
+                        </template>
+                        <template v-else-if="parseInt(data.ptype) == 2">
+                            <!-- 多文件 -->
+                            <el-icon style="font-size: 20px;vertical-align: text-bottom;margin-right:5px;">
+                                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="10" width="28" height="34" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M35 10V4H8C7.44772 4 7 4.44772 7 5V38H13" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 22H33" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 30H33" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </el-icon>
+                        </template>
+                        <template v-else-if="parseInt(data.ptype) == 3">
+                            <!-- 库发布 -->
+                            <el-icon style="font-size: 20px;vertical-align: text-bottom;margin-right:5px;">
+                                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.59202 19.4667C4.29018 18.2091 5.24343 17 6.53679 17H41.4632C42.7566 17 43.7098 18.2091 43.408 19.4667L38.368 40.4667C38.1522 41.366 37.348 42 36.4232 42H11.5768C10.652 42 9.84784 41.366 9.63202 40.4667L4.59202 19.4667Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="11" y="7" width="8" height="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 17L25.5 8L38 17" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 25H23" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+                            </el-icon>
+                        </template>
+                        <template v-else-if="parseInt(data.ptype) == 5">
+                            <!-- 智能数据 -->
+                            <el-icon style="font-size: 20px;vertical-align: text-bottom;margin-right:5px;">
+                                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M24.0002 45C27.2208 45 32.7276 40.8 32.7276 24C32.7276 7.2 27.2208 3 24.0002 3C20.7797 3 15.2729 7.48302 15.2729 24C15.2729 40.517 20.7797 45 24.0002 45Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path fill-rule="evenodd" clip-rule="evenodd" d="M5.10515 35.0001C6.71545 37.8124 13.2479 40.4211 28.364 31.6211C43.48 22.8211 44.5057 15.8124 42.8954 13.0001C41.2851 10.1878 34.4981 7.72728 19.6367 16.3791C4.77521 25.0308 3.49489 32.1878 5.10515 35.0001Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path fill-rule="evenodd" clip-rule="evenodd" d="M5.10506 13.0001C3.4948 15.8124 4.52046 22.8211 19.6366 31.6211C34.7527 40.4211 41.285 37.8124 42.8953 35.0001C44.5056 32.1878 43.2253 25.0308 28.3638 16.3791C13.5024 7.72728 6.71537 10.1878 5.10506 13.0001Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </el-icon>
+                        </template>
+                        <template v-else-if="parseInt(data.ptype) == 4">
+                            <!-- 单页 -->
+                            <el-icon style="font-size: 20px;vertical-align: text-bottom;margin-right:5px;">
+                                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M39 4H11C9.89543 4 9 4.89543 9 6V42C9 43.1046 9.89543 44 11 44H39C40.1046 44 41 43.1046 41 42V6C41 4.89543 40.1046 4 39 4Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 30L31 30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 36H24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="17" y="12" width="14" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </el-icon>
+                        </template>
+                        <template v-else-if="parseInt(data.ptype) == 6">
+                            <!-- 合集 -->
+                            <el-icon style="font-size: 20px;vertical-align: text-bottom;margin-right:5px;">
+                                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 7V19H7C5.89543 19 5 19.8954 5 21V41C5 42.1046 5.89543 43 7 43H27C28.1046 43 29 42.1046 29 41V29H41C42.1046 29 43 28.1046 43 27V7C43 5.89543 42.1046 5 41 5H21C19.8954 5 19 5.89543 19 7Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </el-icon>
+                        </template>
+                        <template v-else-if="parseInt(data.ptype) == 7">
+                            <!-- 删除 -->
+                            <el-icon style="font-size: 20px;vertical-align: text-bottom;margin-right:5px;">
+                                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 12L16.2 5H31.8L33 12" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M6 12H42" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path fill-rule="evenodd" clip-rule="evenodd" d="M37 12L35 43H13L11 12H37Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 35H29" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+                            </el-icon>
+                        </template>
+                        {{ data.soucresname }}
+                    </template>
+                    <template v-else-if="data.btype == 5">
+                        <el-icon style="font-size: var(--el-font-size-medium);margin-right: 5px;"><Coin /></el-icon>
+                        {lang No_data_available}
+                    </template>
+                    
+                </el-text>
+                
+
+            </div>
+            <div @click.stop class="cell" style="min-width: 80px;text-align: center;">
+                <el-switch
+                    v-model="data.isshow"
+                    active-value="1"
+                    inactive-value="0"
+                    @change="TreeStatus(data)"
+                ></el-switch>
+            </div>
+            <div class="cell" style="min-width:230px;text-align: center;">
+                <el-button 
+                    icon="edit"
+                    @click="OperationTree('edit',node,'bottom')">{lang edit}</el-button>
+                <el-popconfirm title="{lang cloumn_delete_confirm}" @confirm="OperationTree('delete',node,'bottom')">
+                    <template #reference>
+                        <el-button
+                            type="danger"
+                            plain
+                            icon="delete">{lang delete}</el-button>
+                    </template>
+                </el-popconfirm>
+            </div>
+            </template>
+    </el-tree>
+    <div class="el-table__append-wrapper">
+        <el-button 
+            style="width: 100%;border-radius: 0;height: 65px;font-size: 16px;" 
+            plain 
+            text 
+            @click="OperationAddNew('bottom')" 
+            icon="CirclePlus">{lang add}</el-button>
+    </div>
+</div>
+<!--{template components/index/tip}-->

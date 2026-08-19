@@ -1,0 +1,96 @@
+<?php
+/*
+ * @copyright   QiaoQiaoShiDai Internet Technology(Shanghai)Co.,Ltd
+ * @license     https://www.oaooa.com/licenses/
+ * 
+ * @link        https://www.oaooa.com
+ * @author      zyx(zyx@oaooa.com)
+ */
+
+$lang = array(
+    'appname'=>'管理中心',
+    'sysinfo'=>'系统信息',
+    'versioninfo'=>'版本信息',
+    'user_licenced'=>'授权用户数',
+    'system1'=>'增购用户',
+    'system2'=>'增购任意数量用户后，系统即可升级为团队版',
+    'system3'=>'机器识别码',
+    'system4'=>'复制识别码',
+    'system5'=>'增购用户时需复制机器识别码，用于授权文件绑定',
+    'system6'=>'授权时间',
+    'system7'=>'在线获取授权',
+    'system8'=>'上传授权文件',
+    'system9'=>'点击在线获取授权，或手动上传授权文件',
+    'system10'=>'购买规则',
+    'system11'=>'<p class="">1、个人版1用户永久免费使用，增购1用户，系统即可升级为团队版</p>
+    <p class="">2、99元/用户，需要多少用户购买多少即可。也可以随着人员增加陆续增购用户。累计购买100用户后，系统自动升级为无限用户</p>
+    <p class="">3、如果是首次增购用户，增购用户后可在系统工具中在线更新系统到团队版程序</p>',
+    'system12'=>'购买方法',
+    'system13'=>'在线购买自动更新方法',
+    'system14'=>'手动购买上传更新方法',
+    'system15'=>'欧奥官网用户中心',
+    'system16'=>'的账号密码',
+    'system17'=>'验证后自动更新授权文件',
+    'system18'=>'欧奥用户中心账号',
+    'system19'=>'欧奥用户中心密码',
+    'system20'=>'提交获取',
+    'system21'=>'如忘记密码可在欧奥用户中心使用找回密码',
+    'system22'=>'您的系统现在为个人版，可以升级到团队版程序。',
+    'system23'=>'授权文件更新成功',
+    'system24'=>'开始升级',
+    'system25'=>'关闭窗口',
+
+    'license_step1_1_title'=>'登录官网增购用户',
+    'license_step1_1'=>'点击 增购用户 按钮，弹窗内填写欧奥图文中心账号密码，然后点击提交获取（如没有账号，请先注册）',
+    'license_step1_2_title'=>'填写增购订单信息，完成支付',
+    'license_step1_2'=>'购买页面会自动填写机器码（如未填入，请复制本页的机器码），填写购买数量，点击提交，并且完成支付',
+    'license_step1_3_title'=>'在线获取授权',
+    'license_step1_3'=>'点击 在线获取授权 按钮，弹窗内填写欧奥图文中心账号密码，授权文件会自动导入。本页能看到授权时间即为授权成功',
+
+    'license_step2_1_title'=>'登录官网',
+    'license_step2_1'=>'访问 官网 ，登录（如没有账号，请先注册），点击 立即购买 ',
+    'license_step2_2_title'=>'填写订单信息，完成支付',
+    'license_step2_2'=>'在本页 复制识别码 填写到购买页面识别码位置并填写购买数量，并且完成支付',
+    'license_step2_3_title'=>'下载授权文件',
+    'license_step2_3'=>'官网进入用户中心，授权栏目 下载授权文件，授权文件会下载到本地电脑',
+    'license_step2_4_title'=>'上传授权文件',
+    'license_step2_4'=>'点击 上传授权文件 按钮，选择上一步下载的授权文件。本页能看到授权时间即为授权成功',
+
+
+    'need_update'=>'有新版本可更新，请点击升级',
+    'library_file'=>'文件库',
+    'library_file_desc'=>'统一管理所有文件资产',
+    'alonepage_manage'=>'单页',
+    'alonepage_manage_desc'=>'个性化独立页面',
+    'intelligent'=>'智能数据',
+    'intelligent_desc'=>'通过条件组织文件',
+    'publish_manage'=>'发布管理',
+    'publish_manage_desc'=>'所有发布内容管理',
+    'banner_manage'=>'栏目管理',
+    'banner_manage_desc'=>'站点导航设置',
+    'data_manage'=>'数据管理',
+    'system_config'=>'系统设置',
+    'system_config_desc'=>'配置站点基础参数，安全策略与全局行为',
+    'user_manage'=>'用户管理',
+    'user_manage_desc'=>'用户管理，用户组管理',
+    'system_tools'=>'系统工具',
+    'system_tools_desc'=>'缓存管理，系统升级与计划任务等',
+    'system_log'=>'系统日志',
+    'system_log_desc'=>'系统操作日志，错误日志，访问日志',
+    'share_manage'=>'分享管理',
+    'share_manage_desc'=>'管理所有对外分享链接及访问权限',
+    'storage_manage'=>'存储管理',
+    'storage_manage_desc'=>'配置和管理文件存储位置与策略',
+    'search_setting'=>'搜索设置',
+    'search_setting_desc'=>'配置搜索功能',
+    'stats'=>'统计',
+    'stats_desc'=>'查看系统使用情况与关键数据统计',
+    'tabgroup_manage'=>'专辑管理',
+    'tabgroup_manage_desc'=>'管理所有专辑及专辑内文件',
+    'collection_manage'=>'收集管理',
+    'collection_manage_desc'=>'管理所有收集及收集内文件',
+    'app_extensions'=>'应用扩展',
+    'international'=>'多语言设置',
+    'international_desc'=>'配置多语言',
+);
+?>

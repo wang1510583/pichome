@@ -1,0 +1,5 @@
+sdk.dir=/path/to/Android/Sdk
+
+# Optional: server-issued user-agent tag used by this private deployment.
+# Never commit the real value. Leave blank when the server does not require it.
+pichome.appAccessTag=

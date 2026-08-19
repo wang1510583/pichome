@@ -1,0 +1,291 @@
+<!--{template common/container/pc/header_start}-->
+<link rel="stylesheet" href="static/scss/default/index.css?{VERHASH}">
+<link rel="stylesheet" href="{MOD_PATH}/template/assets/index.css?{VERHASH}">
+<style>
+
+
+</style>
+<!--{template common/container/pc/header_end}-->
+<div id="dzzoffice">
+	<el-container class="page-main">
+        <!--{template componets/header}-->
+		<el-main style="padding: 0">
+            <el-scrollbar ref="scrollbar" >
+                <div class="container" >
+                    <div class="container-piece">
+                        <p class="title">
+                            <el-text tag="b" size="large" style="color: var(--el-text-color-primary);">{lang sysinfo}</el-text>
+                        </p>
+                        <el-row :gutter="20">
+                            <el-col :lg="6" :md="8" :sm="12" :xs="24">
+                                <el-card shadow="never" class="system-card">
+                                    <template #header>
+                                        <div class="card-header">
+                                            <span>{lang versioninfo}：</span>
+                                        </div>
+                                        </template>
+                                        <p class="card__center">{{formdata.versions}}</p>
+                                        <p style="text-align: center">{$version}</p>
+                                        <p class="card__footer" v-if="upgrade">
+                                        <el-link type="primary" :underline="false" href="admin.php?mod=system#/systemupgrade">{lang need_update}</el-link>
+                                        </p>
+                                </el-card>
+                            </el-col>
+                            <el-col :lg="6" :md="8" :sm="12" :xs="24">
+                                <el-card shadow="never" class="system-card">
+                                    <template #header>
+                                        <div class="card-header">
+                                          <span>{lang user_licenced}：</span>
+                                        </div>
+                                      </template>
+                                      <p class="card__center">{{formdata.num}}</p>
+                                      <p class="card__footer">
+                                        <el-link type="primary" :href="'https://oaooa.com/index.php?mod=member&op=buy&id=1&mcode='+formdata.code" target="_blank" :underline="false">
+                                            {lang system1}</el-link>
+                                      </p>
+                                </el-card>
+                            </el-col>
+                            <el-col :lg="6" :md="8" :sm="12" :xs="24">
+                                <el-card shadow="never" class="system-card">
+                                    <template #header>
+                                        <div class="card-header">
+                                          <span>{lang system3}：</span>
+                                        </div>
+                                      </template>
+                                      <p class="card__center" style="text-align: left;position: relative;padding-right: 26px;">
+                                        <template v-if="isview">
+                                            {{formdata.code}}
+                                        </template>
+                                        <template v-else>
+                                            ***************
+                                        </template>
+                                        <el-icon style="cursor: pointer;position: absolute;right: 0;top: 4.6px;" @click="isview=!isview">
+                                            <template v-if="isview">
+                                                <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24 36C35.0457 36 44 24 44 24C44 24 35.0457 12 24 12C12.9543 12 4 24 4 24C4 24 12.9543 36 24 36Z" fill="none" stroke="#333" stroke-width="4" stroke-linejoin="round"/><path d="M24 29C26.7614 29 29 26.7614 29 24C29 21.2386 26.7614 19 24 19C21.2386 19 19 21.2386 19 24C19 26.7614 21.2386 29 24 29Z" fill="none" stroke="#333" stroke-width="4" stroke-linejoin="round"/></svg>
+                                            </template>
+                                            <template v-else>
+                                                <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 16C6.63472 17.2193 7.59646 18.3504 8.82276 19.3554C12.261 22.1733 17.779 24 24 24C30.221 24 35.739 22.1733 39.1772 19.3554C40.4035 18.3504 41.3653 17.2193 42 16" stroke="#333" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M28.9775 24L31.048 31.7274" stroke="#333" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M37.3535 21.3536L43.0103 27.0104" stroke="#333" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.00004 27.0103L10.6569 21.3534" stroke="#333" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.9278 31.7276L18.9983 24.0001" stroke="#333" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            </template>
+                                            
+
+                                        </el-icon>
+                                        </p>
+                                      <p class="card__footer">
+                                        <el-link type="primary" :underline="false" @click="handleCopyCode">{lang system4}</el-link>
+                                      </p>
+                                </el-card>
+                            </el-col>
+                            <el-col :lg="6" :md="8" :sm="12" :xs="24">
+                                <el-card shadow="never" class="system-card">
+                                    <template #header>
+                                        <div class="card-header">
+                                          <span>{lang system6}：</span>
+                                        </div>
+                                    </template>
+                                    <el-text tag="p" class="card__center" truncated>{{formdata.time}}</el-text>
+                                    <p class="card__footer">
+                                        <el-link type="primary" :underline="false" @click="dialogVisible = true;">
+                                            {lang system7}</el-link>
+                                        <el-link type="success" class="card__upload" style="margin-left: 8px;" :underline="false">
+                                            {lang system8}
+                                            <el-upload
+                                            class="upload"
+                                            :show-file-list="false"
+                                            accept=".lic"
+                                            action="{MOD_URL}&do=authorize&operation=upload"
+                                            :on-success="handleUploadSuccess">
+                                            <el-button type="success" ><el-icon><Upload /></el-icon>{lang system8}</el-button>
+                                        </el-upload>
+                                        </el-link>
+                                    </p>
+                                </el-card>
+                            </el-col>
+                        </el-row>
+                    </div>
+                    <div class="container-piece" v-for="nav in lists">
+                        <p class="title">
+                            <el-text tag="b" size="large" style="color: var(--el-text-color-primary);">{{nav.title}}</el-text>
+                        </p>
+                        <el-row :gutter="20">
+                            <template v-for="item in nav.lists">
+                                <el-col class="content-li" :lg="6" :md="8" :sm="12" :xs="24">
+                                    <el-card :key="i"  shadow="hover">
+                                        <el-link  :underline="false" :href="item.url">
+                                            <div class="item">
+                                                <el-image
+                                                :src="item.img" 
+                                                fit="contain">
+                                                <template #error><div class="el-image__placeholder"></div></template>
+                                            </el-image>
+                                                <el-text tag="h3" class="title" >{{item.name}}</el-text>
+                                                <el-text tag="p" type="info"   class="desc is-line-clamp" line-clamp="2">{{item.desc}}</el-text>
+                                            </div>
+                                        </el-link>
+                                    </el-card>
+                                </el-col>
+                            </template>
+                            
+                        </el-row>
+                    </div>
+                    <!--{template componets/footer}-->
+                </div>
+
+            </el-scrollbar>
+		</el-main>
+
+	</el-container>
+    <el-dialog
+		v-model="dialogVisible"
+		custom-class="register-dialog"
+		:show-close="false"
+		@closed="registerdialogClose"
+		width="410px">
+		<div class="main-title">{lang input}<a href="https://oaooa.com/member" target="_blank">{lang system15}</a>{lang system16}</div>
+		<div class="sub-title">{lang system17}</div>
+		<el-form :model="registerform" @submit.native.prevent style="width: 350px;margin: 0 auto;padding-top: 30px;" :rules="rules" ref="ruleForm">
+			<el-form-item label="" prop="username">
+				<el-input v-model="registerform.username" type="text" placeholder="{lang system18}"></el-input>
+			</el-form-item>
+			<el-form-item label="" prop="password">
+				<el-input v-model="registerform.password" type="password" placeholder="{lang system19}" autocomplete="new-password"></el-input>
+			</el-form-item>
+			<el-form-item style="margin: 0;">
+				<el-button type="primary" native-type="submit" style="width: 100%;" @click="registerSubmit()">{lang system20}</el-button>
+			</el-form-item>
+		</el-form>
+		<a class="tip" href="https://oaooa.com/user.php?mod=login&op=logging&action=lostpasswd" target="_blank">{lang system21}</a>
+	</el-dialog>
+</div>
+
+<script type="text/javascript">
+    function CopyTxt(item,text){
+		var input = document.createElement('input'); input.setAttribute('id', 'copyInput');
+		input.setAttribute('value', text);
+		document.getElementsByTagName('body')[0].appendChild(input);
+		document.getElementById('copyInput').select();
+		document.execCommand('copy')
+		item.$message({
+		  message: __lang.copy_clipboard,
+		  type: 'success'
+		});
+		document.getElementById('copyInput').remove();
+	};
+	const { createApp, reactive, toRefs, toRef, ref, onMounted, nextTick, watch } = Vue;
+	const dzzoffice = createApp({
+		data() {
+			return {
+				DocumentThemeColor:'',
+                upgrade:parseInt("{eval echo $_G['setting']['upgrade']?1:0}"),
+                lists:$list_json,
+                formdata:{
+					versions:'{$version_name}',//版本信息
+					num:'{$limitusernum}',//授权用户数
+					code:'{$_G['setting']['machinecode']}',//机器识别码
+					time:'{$authdate}',//授权时间
+				},
+                isview:false,
+                dialogVisible:false,
+				registerform:{
+					username:'',
+					password:''
+				},
+				rules: {
+					username: [
+						{ required: true, message: __lang.enter_account, trigger: 'blur' },
+					],
+					password: [
+						{ required: true, message: __lang.enter_password, trigger: 'blur' },
+					],
+				},
+			}
+		},
+        mixins:[],
+		watch:{
+			DocumentThemeColor:{
+				handler(newval){
+					document.querySelector('html').className = newval
+				},
+				deep:true,
+				// immediate:true
+			}
+			
+			
+		},
+		created() {
+			 //主题颜色
+			let theme = localStorage.getItem('theme');
+			if(theme){
+				this.DocumentThemeColor=theme;
+			}else{
+				this.DocumentThemeColor = 'light'
+			}
+           // this.setTime()
+		},
+		methods: {
+			DocumentThemeChange(){
+				if(this.DocumentThemeColor=='light'){
+					this.DocumentThemeColor='dark';
+					localStorage.setItem('theme','dark');
+				}else{
+					this.DocumentThemeColor='light';
+					localStorage.setItem('theme','light');
+				}
+				let self=this;
+				
+			},
+            handleCopyCode(){
+				CopyTxt(this,this.formdata.code);
+			},
+            registerSubmit(){
+				var self = this;
+				self.$refs['ruleForm'].validate(async function(valid){
+					if (valid) {
+						var res = await axios.post(MOD_URL+'&do=updateauth',{
+							submit:true,
+							formhash:'{FORMHASH}',
+							username:self.registerform.username,
+							password:self.registerform.password
+						});
+						if(res == 'intercept'){
+							return false;
+						}
+						var json = res.data;
+						if(json.success){
+							window.location.reload();
+						}else{
+							self.$message.error(json.error);
+						}
+						self.dialogVisible = false;
+					} else {
+						console.log('error submit!!');
+						return false;
+					}
+				});
+			},
+            handleUploadSuccess(response){
+				var self = this;
+				if(response.success){
+					window.location.reload();
+				}else{
+					self.$message.error(__lang.uploading_files_error);
+				}
+			},
+		},
+		mounted() {
+            dzzoffice.WindowThis = this;
+        }
+	});
+	dzzoffice.use(ElementPlus, {
+		locale: {$_G['language_list'][$_G['language']]['elementflagCamel']},
+	});
+	for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+		dzzoffice.component(key, component)
+	}
+	dzzoffice.component('comavatar', comavatar);
+    dzzoffice.component('international',international);
+	// 屏蔽警告信息
+	dzzoffice.config.warnHandler = function(){return null};
+	dzzoffice.mount('#dzzoffice');
+</script>
+
+<!--{template common/container/pc/footer}-->

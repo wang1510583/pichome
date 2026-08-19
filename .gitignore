@@ -1,0 +1,31 @@
+# Android local/build outputs
+android/.gradle/
+android/.idea/
+android/local.properties
+android/**/build/
+android/*.apk
+android/*.aab
+*.iml
+
+# Server secrets and runtime data
+web/config/config.php
+web/.env
+web/.env.*
+web/data/install.lock
+web/data/sendmail.lock
+web/data/attachment/dzz/
+web/data/attachment/pichomethumb/
+web/data/attachment/cache/
+web/data/attachment/temp/
+web/data/avatar/*/
+web/data/backup_*/
+web/data/log/*
+web/data/lock/*
+web/data/template/*
+web/data/cache/tags.php
+
+# Local backups and editor files
+*.backup-*
+*.swp
+*.tmp
+.DS_Store

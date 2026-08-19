@@ -1,0 +1,27 @@
+
+<div style="width: 50px;text-align: center;height: 50px;line-height: 50px;" @click.stop="HeaderNavbarLeftClick">
+	<el-icon style="color: var(--el-text-color-primary);"><Arrow-Left-Bold /></el-icon>
+</div>
+<div style="width: 50px;text-align: center;height: 50px;line-height: 50px;font-size: var(--el-font-size-extra-large);" @click.stop="InformationPopup=true">
+	<el-icon><More /></el-icon>
+</div>
+
+<script type="text/javascript">
+	var HeaderMixin = {
+		methods:{
+			HeaderNavbarLeftClick(){
+				let div = window.parent.document.querySelector('.Details-Iframe');
+				if(div){
+					div.remove();
+				}
+				// window.parent.pvue.JsDetailsPopup.src = '';
+				// if(this.GetParam.historygo){
+				// 	window.location.href = this.GetParam.historygo
+				// }else{
+				// 	window.location.href = MOD_URL;
+				// }
+				
+			},
+		}
+	};
+</script>

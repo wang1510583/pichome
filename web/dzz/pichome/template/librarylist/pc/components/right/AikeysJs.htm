@@ -1,0 +1,74 @@
+<script>
+    let AikeysMixin = {
+        data(){
+            return {
+                Aikeys:{
+                    visible:false,
+                    key:''
+                },
+                AikeysForm:[]
+            }
+        },
+        methods:{
+            handleAIBatch(key){
+                this.Aikeys.visible = true;
+                this.Aikeys.key = key;
+            },
+            AikeysOpen(){
+                this.AikeysForm = [];
+                for (const i in this.RightData.Aikey) {
+                    const vitem = this.RightData.Aikey[i];
+                    this.AikeysForm[vitem.key]=[];
+                    for (const key in vitem.filedkey) {
+                        if (Object.hasOwnProperty.call(vitem.filedkey, key)) {
+                            const element = vitem.filedkey[key];
+                            this.AikeysForm[vitem.key].push({
+                                data: element.tpls,
+                                flag: element.flag,
+                                value: '',
+                                title: element.lablename,
+                            });
+                        }
+                    }
+                }
+            },
+            async AikeysSubmit(){
+                let self = this;
+                let getContent = [];
+                for (let index = 0; index < this.AikeysForm[this.Aikeys.key].length; index++) {
+                    const element = this.AikeysForm[this.Aikeys.key][index];
+                    if(!element.value)continue;
+                    getContent.push({
+                        flag:element.flag,
+                        tplid:element.value,
+                        key:this.Aikeys.key
+                    });
+                }
+                let param = {
+                    getContent:getContent,
+                };
+               
+                if(this.RightType == 'file'){
+					param['rid'] = this.RightActiveRid.join(',');
+				}else if(this.RightType == 'folder'){
+					param['fid'] = this.RightActivefid.join(',');
+				}else{
+                    param['appid'] = this.DocumentAppid;
+                }
+                const {data :res} = await axios.post(MOD_URL+'&op=library&do=ajax&operation=getImageAiData',param);
+                if(res.success){
+                    self.$message({
+                        type:'success',
+                        message:'{lang submit_success}'
+                    });
+                    this.Aikeys.visible = false;
+                }else{
+                    self.$message({
+                        type:'error',
+                        message:res.msg || '{lang submit_error}'
+                    })
+                }
+            }
+        }
+    }
+</script>
