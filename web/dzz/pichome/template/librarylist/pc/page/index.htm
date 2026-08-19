@@ -23,6 +23,28 @@
 	.ImageRightMenu{
 		z-index: 9000 !important;
 	}
+	/* 顶部栏压缩高度 + 按钮缩小 (2026-08-19) */
+	#top_header {
+		height: 46px !important;
+		padding-top: 0 !important;
+		padding-bottom: 0 !important;
+	}
+	#top_header .h-left { padding-right: 10px !important; }
+	#top_header .h-left .el-link { font-size: 14px !important; }
+	#top_header .headerkeyword .el-input__wrapper { height: 30px !important; min-height: 30px !important; --el-input-height: 30px !important; padding-left: 8px !important; padding-right: 8px !important; }
+	#top_header .headerkeyword .el-input__group .el-input__wrapper { height: auto !important; min-height: auto !important; }
+	#top_header .headerkeyword .el-input__inner { font-size: 13px !important; }
+	#top_header .headerkeyword .el-input__prefix .el-icon,
+	#top_header .headerkeyword .el-input__suffix .el-icon { font-size: 14px !important; }
+	#top_header .headerkeyword .el-input__group .el-button { height: 30px !important; font-size: 15px !important; }
+	#top_header button.el-button.is-circle { width: 30px !important; height: 30px !important; }
+	#top_header button.el-button--large { font-size: 15px !important; padding: 4px !important; }
+	#top_header .el-avatar { width: 32px !important; height: 32px !important; font-size: 14px !important; }
+	#top_header .h-right { gap: 6px !important; }
+	@media (max-width: 768px) {
+		#top_header { height: 46px !important; }
+		#top_header .h-right { gap: 2px !important; }
+	}
 	.mobile-sidebar-mask {
 		display: none;
 	}
