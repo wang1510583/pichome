@@ -809,6 +809,7 @@
 							if(self.$refs.RefImageLayout){ self.$refs.RefImageLayout.restart(); }
 							self.CommonGetImageData();
 							if(self.LeftTreeForceRefreshNum){ self.LeftTreeForceRefreshNum(); } else { self.LeftTreeGetFolderNum(); }
+							if(self.LeftGetAllNum){ self.LeftGetAllNum(); }
 						}else{
 							self.$message({type:'error', message:(res && (res.msg || (res.data && res.data.msg))) || '移动失败'});
 						}
