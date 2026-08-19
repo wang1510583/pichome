@@ -917,11 +917,17 @@ class table_pichome_resources extends dzz_table
         //查询文件基本信息
         $data = parent::fetch($rid);
         if (!$data) return false;
+        //目标文件夹 pathkey(用于 folderresources.pathkey 关联计数)
+        $fpathkey = '';
+        if ($fid) {
+            $fdata = C::t('pichome_folder')->fetch($fid);
+            if ($fdata && isset($fdata['pathkey'])) $fpathkey = $fdata['pathkey'];
+        }
         //如果是复制增加目录
         if ($iscopy) {
             //原有fid
             $ofids = $data['fids'] ? explode(',', $data['fids']) : [];
-            $rfolder = ['appid' => $data['appid'], 'rid' => $rid, 'fid' => $fid];
+            $rfolder = ['appid' => $data['appid'], 'rid' => $rid, 'fid' => $fid, 'pathkey' => $fpathkey];
             C::t('pichome_folderresources')->insert($rfolder);
             if (!in_array($fid, $ofids)) {
                 $ofids[] = $fid;
@@ -935,7 +941,7 @@ class table_pichome_resources extends dzz_table
             //移除原目录属性
             C::t('pichome_folderresources')->delete_by_ridfid($rid, $ofids);
             //添加新目录属性
-            $rfolder = ['appid' => $data['appid'], 'rid' => $rid, 'fid' => $fid];
+            $rfolder = ['appid' => $data['appid'], 'rid' => $rid, 'fid' => $fid, 'pathkey' => $fpathkey];
             C::t('pichome_folderresources')->insert($rfolder);
             $attrs = ['fids' => $fid, 'lastdate' => TIMESTAMP];
             C::t('pichome_resources')->update_by_rids($data['appid'], $rid, $attrs);

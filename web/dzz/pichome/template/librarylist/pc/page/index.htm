@@ -260,6 +260,15 @@
 		border-radius: 4px;
 		background: var(--el-color-primary-light-9);
 	}
+	/* 素材拖拽期间覆盖 el-tree 节点排序指示, 只保留当前节点的虚线高亮 (2026-08-19) */
+	#pichome-left-sidebar.pichome-dragging-asset .el-tree-node.is-drop-inner > .el-tree-node__content .el-tree-node__label {
+		background-color: transparent !important;
+		color: inherit !important;
+	}
+	#pichome-left-sidebar.pichome-dragging-asset .el-tree-node.is-drop-before > .el-tree-node__content::before,
+	#pichome-left-sidebar.pichome-dragging-asset .el-tree-node.is-drop-after > .el-tree-node__content::after {
+		display: none !important;
+	}
 	.pichome-root-hint {
 		position: absolute;
 		top: 8px;
@@ -731,9 +740,13 @@
 				}catch(err){}
 				ev.dataTransfer.effectAllowed = 'move';
 				window.__pichomeDragRids = rids;
+				const dw = document.querySelector('#pichome-left-sidebar');
+				if(dw) dw.classList.add('pichome-dragging-asset');
 				pichomeClearDropUI();
 			}, true);
 			document.addEventListener('dragend', function(){
+				const dw2 = document.querySelector('#pichome-left-sidebar');
+				if(dw2) dw2.classList.remove('pichome-dragging-asset');
 				window.__pichomeDragRids = [];
 				pichomeClearDropUI();
 				if(pichomeDragCard){ pichomeDragCard.setAttribute('draggable','false'); pichomeDragCard = null; }
@@ -800,7 +813,7 @@
 							self.$message({type:'success', message:'已将 '+rids.length+' 个素材移动'+(tfid==='root'?'到根目录':'')});
 							if(self.$refs.RefImageLayout){ self.$refs.RefImageLayout.restart(); }
 							self.CommonGetImageData();
-							self.LeftTreeGetFolderNum();
+							if(self.LeftTreeForceRefreshNum){ self.LeftTreeForceRefreshNum(); } else { self.LeftTreeGetFolderNum(); }
 						}else{
 							self.$message({type:'error', message:(res && (res.msg || (res.data && res.data.msg))) || '移动失败'});
 						}

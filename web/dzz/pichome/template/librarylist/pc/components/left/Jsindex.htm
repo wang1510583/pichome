@@ -520,6 +520,14 @@
                     }
                 },1000);
 			},
+			//强制刷新树文件夹计数(供素材拖拽移动后调用, 重置 isgetnum 缓存重新拉取 2026-08-19)
+			async LeftTreeForceRefreshNum(){
+				let self = this;
+				if(!self.LeftTreePathKeys || !self.LeftTreePathKeys.length) return false;
+				self.LeftTreePathKeys.forEach(function(el){ el.isgetnum = 0; });
+				await self.LeftTreeGetFolderNum();
+				return true;
+			},
 			LeftGetTreeDataSubstringFinish(){
 				var self = this;
 				if(self.LeftTree.defaultOpenkeys.length){
