@@ -242,6 +242,40 @@
 			-webkit-backdrop-filter: none;
 		}
 	}
+
+	/* 素材拖拽移动到分类目录 (2026-08-19) */
+	.pichome-left-dragover .el-tree-node__content {
+		background: var(--el-color-primary-light-8) !important;
+		outline: 1px dashed var(--el-color-primary);
+		outline-offset: -1px;
+	}
+	.el-tree-node.pichome-node-dragover > .el-tree-node__content {
+		background: var(--el-color-primary-light-8) !important;
+		outline: 1.5px dashed var(--el-color-primary);
+		outline-offset: -1px;
+	}
+	.left-main.pichome-root-dragover {
+		outline: 2px dashed var(--el-color-primary);
+		outline-offset: -2px;
+		border-radius: 4px;
+		background: var(--el-color-primary-light-9);
+	}
+	.pichome-root-hint {
+		position: absolute;
+		top: 8px;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 3002;
+		padding: 5px 12px;
+		font-size: 12px;
+		line-height: 1.6;
+		color: var(--el-color-primary);
+		background: var(--el-bg-color);
+		border: 1px dashed var(--el-color-primary);
+		border-radius: 8px;
+		box-shadow: var(--el-box-shadow-light);
+		pointer-events: none;
+	}
 </style>
 
 <!--{template common/container/pc/header_end}-->
@@ -583,6 +617,9 @@
 			const dropArea = document.querySelector('.dzz-container');
 			dropArea.addEventListener("drop", self.ImageUploadDropEvent, false);
 			dropArea.addEventListener("dragover", function(e){
+				if((window.__pichomeDragRids && window.__pichomeDragRids.length) || (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types||[],'text/pichome-rids')>-1)){
+					return false;
+				}
 				if(self.LeftCurrenType == 'recycle' || ![0,3].includes(parseInt(self.DocumentVapp.type))){
 					return false;
 				}
@@ -592,6 +629,9 @@
 				self.DocumentDropActive = true;
 			}, false);
 			document.addEventListener("dragleave", function(e){
+				if((window.__pichomeDragRids && window.__pichomeDragRids.length) || (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types||[],'text/pichome-rids')>-1)){
+					return false;
+				}
 				if(self.LeftCurrenType == 'recycle' || ![0,3].includes(parseInt(self.DocumentVapp.type))){
 					return false;
 				}
@@ -630,6 +670,147 @@
 					}, 100);
 				}
 			});
+			// ==== 素材拖拽移动到分类目录 (2026-08-19) ====
+			const PICHOME_DRAG_MIME = 'text/pichome-rids';
+			let pichomeDragCard = null;
+			let pichomeExpandTimer = null;
+			function pichomeGetDragRids(ev){
+				if(ev && ev.dataTransfer){
+					try{
+						const v = ev.dataTransfer.getData(PICHOME_DRAG_MIME);
+						if(v){
+							const arr = JSON.parse(v);
+							if(Array.isArray(arr) && arr.length) return arr;
+						}
+					}catch(err){}
+				}
+				return (window.__pichomeDragRids && window.__pichomeDragRids.length) ? window.__pichomeDragRids.slice() : [];
+			}
+			function pichomeClearDropUI(){
+				const treeWrap = document.querySelector('#pichome-left-sidebar');
+				if(treeWrap) treeWrap.classList.remove('pichome-left-dragover');
+				document.querySelectorAll('.el-tree-node.pichome-node-dragover').forEach(function(n){ n.classList.remove('pichome-node-dragover'); });
+				const lm = document.querySelector('.left-main');
+				if(lm) lm.classList.remove('pichome-root-dragover');
+				const hint = document.getElementById('pichome-root-hint');
+				if(hint) hint.remove();
+				if(pichomeExpandTimer){ clearTimeout(pichomeExpandTimer); pichomeExpandTimer = null; }
+			}
+			function pichomeFindTreeFid(el){
+				const nodeEl = el && el.closest ? el.closest('.el-tree-node') : null;
+				const key = nodeEl && nodeEl.getAttribute('data-key');
+				return (key && key !== '0') ? key : '';
+			}
+			// 左键按下素材卡片时临时启用 draggable(卡片图片默认 draggable=false)
+			document.addEventListener('mousedown', function(ev){
+				if(ev.button !== 0) return;
+				const card = ev.target && ev.target.closest ? ev.target.closest('[data-rid]') : null;
+				if(!card || !document.body.contains(card)){ pichomeDragCard = null; return; }
+				pichomeDragCard = card;
+				card.setAttribute('draggable','true');
+			}, true);
+			window.addEventListener('mouseup', function(){
+				if(pichomeDragCard){
+					const c = pichomeDragCard;
+					setTimeout(function(){ c.setAttribute('draggable','false'); }, 0);
+					pichomeDragCard = null;
+				}
+			}, true);
+			// dragstart: 记录被拖 rid 列表(单张或当前多选集合)
+			document.addEventListener('dragstart', function(ev){
+				const card = ev.target && ev.target.closest ? ev.target.closest('[data-rid]') : null;
+				if(!card) return;
+				const rid = card.getAttribute('data-rid');
+				if(!rid) return;
+				let rids = [rid];
+				const checked = (self.ImageParam && self.ImageParam.checkedKdys) || [];
+				if(checked.length > 1 && checked.indexOf(rid) > -1) rids = checked.slice();
+				try{
+					ev.dataTransfer.setData(PICHOME_DRAG_MIME, JSON.stringify(rids));
+					ev.dataTransfer.setData('text/plain', rids.join(','));
+				}catch(err){}
+				ev.dataTransfer.effectAllowed = 'move';
+				window.__pichomeDragRids = rids;
+				pichomeClearDropUI();
+			}, true);
+			document.addEventListener('dragend', function(){
+				window.__pichomeDragRids = [];
+				pichomeClearDropUI();
+				if(pichomeDragCard){ pichomeDragCard.setAttribute('draggable','false'); pichomeDragCard = null; }
+			}, true);
+			// 左栏作为 drop 目标
+			const leftWrap = document.querySelector('#pichome-left-sidebar');
+			if(leftWrap){
+				leftWrap.addEventListener('dragover', function(ev){
+					const rids = pichomeGetDragRids(ev);
+					if(!rids.length) return;
+					ev.preventDefault();
+					ev.stopPropagation();
+					ev.dataTransfer.dropEffect = 'move';
+					leftWrap.classList.add('pichome-left-dragover');
+					const nodeEl = ev.target.closest ? ev.target.closest('.el-tree-node') : null;
+					document.querySelectorAll('.el-tree-node.pichome-node-dragover').forEach(function(n){ n.classList.remove('pichome-node-dragover'); });
+					const lm = document.querySelector('.left-main');
+					let hint = document.getElementById('pichome-root-hint');
+					if(nodeEl){
+						nodeEl.classList.add('pichome-node-dragover');
+						if(lm) lm.classList.remove('pichome-root-dragover');
+						if(hint){ hint.remove(); hint = null; }
+						// 悬停自动展开子文件夹
+						const fid = pichomeFindTreeFid(nodeEl);
+						if(pichomeExpandTimer){ clearTimeout(pichomeExpandTimer); }
+						if(fid){
+							pichomeExpandTimer = setTimeout(function(){
+								const store = self.$refs.LeftTreeRef && self.$refs.LeftTreeRef.store;
+								const n = store && fid && store.nodesMap[fid];
+								if(n && !n.expanded && !n.isLeaf) n.expand();
+							}, 700);
+						}
+					}else{
+						if(lm) lm.classList.add('pichome-root-dragover');
+						if(!hint){
+							hint = document.createElement('div');
+							hint.id = 'pichome-root-hint';
+							hint.className = 'pichome-root-hint';
+							hint.textContent = '松开鼠标移入根目录(未分类)';
+							leftWrap.appendChild(hint);
+						}
+					}
+				}, true);
+				leftWrap.addEventListener('dragleave', function(ev){
+					const rids = pichomeGetDragRids(ev);
+					if(!rids.length || !leftWrap.contains(ev.relatedTarget)) pichomeClearDropUI();
+				}, true);
+				leftWrap.addEventListener('drop', async function(ev){
+					const rids = pichomeGetDragRids(ev);
+					if(!rids.length) return;
+					ev.preventDefault();
+					ev.stopPropagation();
+					window.__pichomeDragRids = [];
+					pichomeClearDropUI();
+					const nodeEl = ev.target.closest ? ev.target.closest('.el-tree-node') : null;
+					let tfid = 'root';
+					if(nodeEl) tfid = pichomeFindTreeFid(nodeEl) || 'root';
+					const ofid = (self.LeftTree && self.LeftTree.Currentkey) ? self.LeftTree.Currentkey : '';
+					try{
+						const {data: res} = await axios.post(MOD_URL+'&op=library&do=folder&operation=copy', {
+							iscopy:0, tfid:tfid, ofid:ofid, rids:rids.join(',')
+						});
+						if(res && res.data && res.data.success){
+							self.$message({type:'success', message:'已将 '+rids.length+' 个素材移动'+(tfid==='root'?'到根目录':'')});
+							if(self.$refs.RefImageLayout){ self.$refs.RefImageLayout.restart(); }
+							self.CommonGetImageData();
+							self.LeftTreeGetFolderNum();
+						}else{
+							self.$message({type:'error', message:(res && res.data && res.data.msg) || '移动失败'});
+						}
+					}catch(err){
+						self.$message({type:'error', message:'移动请求失败'});
+					}
+				}, true);
+			}
+			// ==== 素材拖拽移动到分类目录 END ====
+
 			dzzoffice.WindowThis = this;
 		}
 	});

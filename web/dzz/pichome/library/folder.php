@@ -32,14 +32,23 @@ if($operation == 'deletefolder'){//删除目录
     exit(json_encode(array('success'=>true)));
 }elseif($operation == 'copy'){//粘贴文件
   $iscopy = isset($_GET['iscopy']) ? intval($_GET['iscopy']):1;//是否是复制
-  $tfid = isset($_GET['tfid']) ? intval($_GET['tfid']):'';//目标位置
+  $tfid = isset($_GET['tfid']) ? trim($_GET['tfid']):'';//目标位置，'root' 表示根目录（未分类）
   $ofid = isset($_GET['ofid']) ? intval($_GET['ofid']):'';//原始位置
   $rids = isset($_GET['rids']) ? explode(',',$_GET['rids']):'';//粘贴文件
-  if(!$ofid || !$tfid || !$rids) exit(json_encode(array('success'=>false,'msg'=>'参数错误!')));
- $returndata['failedrids'] = $returndata['successrids'] = [];
+  if($tfid === '' || !$rids) exit(json_encode(array('success'=>false,'msg'=>'参数错误!')));
+  $returndata['failedrids'] = $returndata['successrids'] = [];
   foreach($rids as $rid){
-      if(C::t('pichome_reources')->move_file_to_folder($rid,$tfid,$iscopy)) $successrids[] = $rid;
-      else  $failedrids[] = $rid;
+      if($tfid === 'root'){//移动到根目录（未分类）
+          $rdata = C::t('pichome_resources')->fetch($rid);
+          if(!$rdata){ $returndata['failedrids'][] = $rid; continue; }
+          $oldfids = $rdata['fids'] ? explode(',', $rdata['fids']) : [];
+          if($oldfids){
+              C::t('pichome_folderresources')->delete_by_ridfid($rid, $oldfids);
+          }
+          C::t('pichome_resources')->update_by_rids($rdata['appid'], $rid, array('fids'=>'', 'lastdate'=>TIMESTAMP));
+          $returndata['successrids'][] = $rid;
+      }elseif(C::t('pichome_resources')->move_file_to_folder($rid,$tfid,$iscopy)) $returndata['successrids'][] = $rid;
+      else  $returndata['failedrids'][] = $rid;
   }
     exit(json_encode(array('success'=>true,'data'=>$returndata)));
 }elseif($operation == 'foldersort'){
