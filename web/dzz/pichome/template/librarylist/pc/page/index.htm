@@ -796,13 +796,13 @@
 						const {data: res} = await axios.post(MOD_URL+'&op=library&do=folder&operation=copy', {
 							iscopy:0, tfid:tfid, ofid:ofid, rids:rids.join(',')
 						});
-						if(res && res.data && res.data.success){
+						if(res && (res.success || (res.data && res.data.success))){
 							self.$message({type:'success', message:'已将 '+rids.length+' 个素材移动'+(tfid==='root'?'到根目录':'')});
 							if(self.$refs.RefImageLayout){ self.$refs.RefImageLayout.restart(); }
 							self.CommonGetImageData();
 							self.LeftTreeGetFolderNum();
 						}else{
-							self.$message({type:'error', message:(res && res.data && res.data.msg) || '移动失败'});
+							self.$message({type:'error', message:(res && (res.msg || (res.data && res.data.msg))) || '移动失败'});
 						}
 					}catch(err){
 						self.$message({type:'error', message:'移动请求失败'});
