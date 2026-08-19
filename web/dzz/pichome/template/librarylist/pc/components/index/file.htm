@@ -149,10 +149,6 @@
             FileContextmenu(item){//右键事件
                 var self = this;
 				this.DocumentHideAllPop();
-				if(this.DocumentVapp.type != 3){
-					self.Fileclick([item.fid]);
-					return false;
-				}
 				let menu = self.$refs.fileMenu.popperRef.contentRef;
 				var evt = event || window.event;
 				var clientWidth = document.documentElement.clientWidth || document.body.clientWidth ;

@@ -124,7 +124,7 @@
 	width="auto"
 	:show-arrow="false">
     <ul class="el-dropdown-menu">
-		<template v-if="DocumentVapp.type == 3 || DocumentVapp.type == 1">
+		<template>
 			<li 
 				class="el-dropdown-menu__item" 
 				v-show="ImageMenu.operation.cove"
@@ -185,7 +185,7 @@
 			<el-icon><search /></el-icon>
 			{lang search_picture}
 		</li>
-		<template v-if="DocumentVapp.type == 3">
+		<template>
 			<li class="el-dropdown-menu__item--divided" v-if="ImageMenu.operation.share || ImageMenu.operation.down || ImageMenu.operation.link || ImageMenu.operation.location" style="margin: 4px 0;"></li>
 			<li 
 				class="el-dropdown-menu__item" 
@@ -216,22 +216,7 @@
                 {lang final_delete}
 			</li>
 		</template>
-		<template v-else-if="DocumentVapp.type == 0">
-			<li
-				v-if="ImageMenu.operation.delete"
-				class="el-dropdown-menu__item--divided"
-				style="margin: 4px 0;">
-			</li>
-			<li
-				v-if="ImageMenu.operation.delete"
-				class="el-dropdown-menu__item"
-				role="menuitem"
-				style="color: var(--el-color-danger);"
-				@click.stop="ImageOperation('delete')">
-				<el-icon><Delete></Delete></el-icon>
-				删除素材
-			</li>
-		</template>
+
 		
 	</ul>
 	
