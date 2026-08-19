@@ -140,8 +140,7 @@
 	@after-enter="handleDocumentOverlay(true)"
 	@before-leave="handleDocumentOverlay(false)">
     <ul class="el-dropdown-menu">
-		<li 
-			v-if="this.DocumentVapp.type == 3"
+		<li
 			class="el-dropdown-menu__item" 
 			@click.stop="LeftTreeOperation('rename')">
 			<el-icon><Edit-Pen /></el-icon>
@@ -153,16 +152,14 @@
 			<el-icon><Setting /></el-icon>
             {lang Automatic_annotation}
 		</li>
-		<el-divider v-if="this.DocumentVapp.type == 3" style="margin: 4px 0;"></el-divider>
+		<el-divider style="margin: 4px 0;"></el-divider>
 		<li
-			v-if="this.DocumentVapp.type == 3"
 			class="el-dropdown-menu__item" 
 			@click="LeftTreeOperation('addparent')">
 			<el-icon><Folder-Add /></el-icon>
             {lang add_same_level}
 		</li>
 		<li
-			v-if="this.DocumentVapp.type == 3"
 			class="el-dropdown-menu__item" 
 			@click="LeftTreeOperation('addchild')">
 			<el-icon><Folder-Add /></el-icon>

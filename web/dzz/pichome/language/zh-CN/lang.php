@@ -35,7 +35,9 @@ $lang = array(
     'banner_type_is_notallow_edit' => '栏目类型不允许修改',
     'normal_directory' => '普通目录',
 
-    'rename' => '改名',
+    'rename' => '重命名',
+    'add_same_level' => '创建文件夹',
+    'add_son_level' => '创建子文件夹',
     'set_tag' => '打标签',
     'set_desc' => '写描述',
     'create_thumb' => '生成缩略图',

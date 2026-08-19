@@ -36,6 +36,8 @@ $lang = array (
     'normal_directory'=>'Normal directory',
 
     'rename'=>'Rename',
+    'add_same_level' => 'Create Folder',
+    'add_son_level' => 'Create Subfolder',
     'set_tag'=>'Tagging',
     'set_desc'=>'Descripting',
     'create_thumb'=>'Thumbnails',
