@@ -453,10 +453,10 @@ class table_pichome_resources extends dzz_table
             switch ($apptype) {
                 case 0:
                     //小图地址
-                    if ($resourcesdata['hasthumb']) {
-                        $tmppath = str_replace(strrchr($resourcesdata['path'], "."), "", $resourcesdata['path']);
-
-                        $imgdata['icondata'] = IO::getFileUri($thumbdir . BS . $tmppath . '_thumbnail.png');
+                    $tmppath = str_replace(strrchr($resourcesdata['path'], "."), "", $resourcesdata['path']);
+                    $thumbnailFile = $thumbdir . BS . $tmppath . '_thumbnail.png';
+                    if ($resourcesdata['hasthumb'] || is_file($thumbnailFile)) {
+                        $imgdata['icondata'] = IO::getFileUri($thumbnailFile);
                     } else {
                         //如果没有缩略图并且图片可直接预览使用大图地址作为小图
                         if (in_array($ext, explode(',', getglobal('config/pichomecommimageext')))) {
@@ -765,8 +765,11 @@ class table_pichome_resources extends dzz_table
             } else {
                 $imgdata = $this->getfileimageurl($v, $downshare[$v['appid']]['path'], $downshare[$v['appid']]['type'], $v['download']);
             }
-            $v['hasthumb'] = $imagedatas[$v['rid']]['imgstatus'] ? intval($imagedatas[$v['rid']]['imgstatus']):0;
+            $v['hasthumb'] = $imagedatas[$v['rid']]['imgstatus'] ? intval($imagedatas[$v['rid']]['imgstatus']): (isset($v['hasthumb']) ? intval($v['hasthumb']) : 0);
             $v = array_merge($v, $imgdata);
+            if (!empty($v['icondata']) && $v['icondata'] !== 'static/dzzthumb/preview/b.gif') {
+                $v['hasthumb'] = 1;
+            }
             $v['annonationnum'] = $annonationnumdata[$v['rid']]['num'];
             $thumbwidth = getglobal('config/pichomethumsmallwidth') ? getglobal('config/pichomethumsmallwidth') : 360;
             $thumbheight = getglobal('config/pichomethumsmallwidth') ? getglobal('config/pichomethumsmallwidth') : 360;

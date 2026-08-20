@@ -93,13 +93,13 @@ foreach ($needcreate as $v) {
     //如果是本地存储位置文件
     if ($metadata['bz'] == 'dzz::') {
         //判断是否符合本地存储生成规则后缀
-        if (!isset($status[$dzztype][$metadata['bz']]) || !$status[$dzztype][$metadata['bz']]) {
+        if (!isset($thumbStatus[$dzztype][$metadata['bz']]) || !$thumbStatus[$dzztype][$metadata['bz']]) {
             dzz_process::unlock($processname1);
             continue;
         }
     } else {
         $type = getQcosExt($ext);
-        if (!(isset($status[$dzztype][$metadata['bz']]) && $status[$type][$metadata['bz']]) && !$status[$dzztype]['dzz::']) {
+        if (!(isset($thumbStatus[$dzztype][$metadata['bz']]) && $thumbStatus[$type][$metadata['bz']]) && !$thumbStatus[$dzztype]['dzz::']) {
             dzz_process::unlock($processname1);
             continue;
         }

@@ -276,12 +276,21 @@ class io_dzz extends io_api
             $size = fix_integer_overflow(filesize($destination));
             $width = 0;
             $height = 0;
+            $duration = 0;
+            $videoexts = array('mp4','mov','mkv','webm','avi','m4v','flv','wmv','ts','m2ts','3gp','mpg','mpeg','vob','ogv','f4v');
+            $thumbfile = $itemdir . DIRECTORY_SEPARATOR . $basename . '_thumbnail.png';
+
             if (in_array($ext, array('jpg','jpeg','png','gif','webp','bmp'), true)) {
                 $imageinfo = @getimagesize($destination);
                 if ($imageinfo) {
                     $width = intval($imageinfo[0]);
                     $height = intval($imageinfo[1]);
                 }
+            } elseif (in_array($ext, $videoexts, true)) {
+                $vinfo = self::getVideoMetadataAndThumbnail($destination, $thumbfile, 1);
+                if (!empty($vinfo['width'])) $width = intval($vinfo['width']);
+                if (!empty($vinfo['height'])) $height = intval($vinfo['height']);
+                if (!empty($vinfo['duration'])) $duration = floatval($vinfo['duration']);
             }
             $nowms = (int) round(microtime(true) * 1000);
             $efolders = $folderdata['efid'] ? array($folderdata['efid']) : array();
@@ -300,7 +309,8 @@ class io_dzz extends io_api
                 'modificationTime' => $nowms,
                 'lastModified' => $nowms,
                 'width' => $width,
-                'height' => $height
+                'height' => $height,
+                'duration' => $duration
             );
             $jsonflags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
             $metadatafile = $itemdir . DIRECTORY_SEPARATOR . 'metadata.json';
@@ -344,7 +354,7 @@ class io_dzz extends io_api
             $filemetadata['dateline'] = $nowms;
             $filemetadata['lastdate'] = time();
             $filemetadata['star'] = 0;
-            $filemetadata['duration'] = 0;
+            $filemetadata['duration'] = $duration;
             $eagle->exportfile($id, $filemetadata);
 
             $record = C::t('#eagle#eagle_record')->fetch_by_eid($id, $appdata['appid']);
@@ -739,7 +749,32 @@ class io_dzz extends io_api
             }
 
         }else{
-            $imginfo = dzzgetimagesize($_G['setting']['attachdir'] . $attach['attachment']);
+            $sourcefile = $_G['setting']['attachdir'] . $attach['attachment'];
+            $ext = strtolower($attach['filetype']);
+            $videoexts = array('mp4','mov','mkv','webm','avi','m4v','flv','wmv','ts','m2ts','3gp','mpg','mpeg','vob','ogv','f4v');
+            $width = 0;
+            $height = 0;
+            $vduration = 0;
+            $thumbgenerated = false;
+            $thumbpath_rel = '';
+
+            if (in_array($ext, $videoexts, true)) {
+                $thumbname = 'pichomethumb/' . date('Ym') . '/' . date('d') . '/' . md5($attach['aid'] . 'small') . '_original.jpg';
+                $thumbfull = $_G['setting']['attachdir'] . $thumbname;
+                $vinfo = self::getVideoMetadataAndThumbnail($sourcefile, $thumbfull, 1);
+                if (!empty($vinfo['width'])) $width = intval($vinfo['width']);
+                if (!empty($vinfo['height'])) $height = intval($vinfo['height']);
+                if (!empty($vinfo['duration'])) $vduration = floatval($vinfo['duration']);
+                if (!empty($vinfo['hasthumb'])) {
+                    $thumbgenerated = true;
+                    $thumbpath_rel = $thumbname;
+                }
+            } else {
+                $imginfo = dzzgetimagesize($sourcefile);
+                $width = isset($imginfo[0]) ? intval($imginfo[0]) : 0;
+                $height = isset($imginfo[1]) ? intval($imginfo[1]) : 0;
+            }
+
             if (preg_match('/^(.*?)(\.[^.]+)$/', $attach['filename'], $matches)) {
                 // 获取不带扩展名的文件名
                 $filename = $matches[1];
@@ -757,8 +792,9 @@ class io_dzz extends io_api
                 'mtime' => TIMESTAMP * 1000,
                 'dateline' => TIMESTAMP * 1000,
                 'btime' => TIMESTAMP * 1000,
-                'width' => isset($imginfo[0]) ? $imginfo[0] : 0,
-                'height' => isset($imginfo[1]) ? $imginfo[1] : 0,
+                'width' => $width,
+                'height' => $height,
+                'hasthumb' => $thumbgenerated ? 1 : 0,
                 'lastdate' => TIMESTAMP,
                 'level' => $level ? $level : 0,
                 'name' => $filename,
@@ -775,12 +811,34 @@ class io_dzz extends io_api
                     'path' => $attach['aid'],
                     'searchval' => $setarr['name']
                 ];
+                if ($vduration > 0) {
+                    $attrdata['duration'] = $vduration;
+                }
 
                 C::t('pichome_resources_attr')->insert($attrdata);
                 //目录数据
                 if ($fid) {
                     $frsetarr = ['appid' => $appid, 'rid' => $setarr['rid'], 'fid' => $fid];
                     C::t('pichome_folderresources')->insert($frsetarr);
+                }
+
+                if ($thumbgenerated) {
+                    $thumbrecorddata = [
+                        'rid' => $setarr['rid'],
+                        'width' => $width,
+                        'height' => $height,
+                        'lwidth' => isset($_G['setting']['thumbsize']['large']['width']) ? $_G['setting']['thumbsize']['large']['width'] : 1920,
+                        'lheight' => isset($_G['setting']['thumbsize']['large']['height']) ? $_G['setting']['thumbsize']['large']['height'] : 1080,
+                        'swidth' => isset($_G['setting']['thumbsize']['small']['width']) ? $_G['setting']['thumbsize']['small']['width'] : 360,
+                        'sheight' => isset($_G['setting']['thumbsize']['small']['height']) ? $_G['setting']['thumbsize']['small']['height'] : 360,
+                        'filesize' => $attach['filesize'],
+                        'ext' => $ext,
+                        'spath' => $thumbpath_rel,
+                        'sstatus' => 1,
+                        'sdateline' => TIMESTAMP,
+                        'opath' => $thumbpath_rel
+                    ];
+                    C::t('thumb_record')->insert_data($thumbrecorddata);
                 }
 
                 C::t('pichome_vapp')->addcopy_by_appid($appid);
@@ -2007,4 +2065,70 @@ class io_dzz extends io_api
     }
 
 
+    public static function getVideoMetadataAndThumbnail($videoPath, $thumbPath = null, $time = 1)
+    {
+        $res = array(
+            'width' => 0,
+            'height' => 0,
+            'duration' => 0,
+            'hasthumb' => 0
+        );
+        if (!is_file($videoPath)) {
+            return $res;
+        }
+
+        $escapedVideo = escapeshellarg($videoPath);
+        $ffprobeBin = '/usr/bin/ffprobe';
+        if (!is_executable($ffprobeBin) && defined('DZZ_ROOT') && is_executable(DZZ_ROOT . 'dzz/ffmpeg/ffmpeg/ffprobe.exe')) {
+            $ffprobeBin = DZZ_ROOT . 'dzz/ffmpeg/ffmpeg/ffprobe.exe';
+        }
+
+        if (is_executable($ffprobeBin)) {
+            $cmd = $ffprobeBin . " -v error -select_streams v:0 -show_entries stream=width,height,duration -show_entries format=duration -of default=noprint_wrappers=1:nokey=0 " . $escapedVideo . " 2>/dev/null";
+            $output = @shell_exec($cmd);
+            if ($output) {
+                $lines = explode("\n", trim($output));
+                foreach ($lines as $line) {
+                    $parts = explode('=', trim($line), 2);
+                    if (count($parts) === 2) {
+                        $k = trim($parts[0]);
+                        $v = trim($parts[1]);
+                        if ($k === 'width' && intval($v) > 0 && !$res['width']) {
+                            $res['width'] = intval($v);
+                        } elseif ($k === 'height' && intval($v) > 0 && !$res['height']) {
+                            $res['height'] = intval($v);
+                        } elseif ($k === 'duration' && floatval($v) > 0 && !$res['duration']) {
+                            $res['duration'] = round(floatval($v), 3);
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($thumbPath) {
+            $ffmpegBin = '/usr/bin/ffmpeg';
+            if (!is_executable($ffmpegBin) && defined('DZZ_ROOT') && is_executable(DZZ_ROOT . 'dzz/ffmpeg/ffmpeg/ffmpeg.exe')) {
+                $ffmpegBin = DZZ_ROOT . 'dzz/ffmpeg/ffmpeg/ffmpeg.exe';
+            }
+            if (is_executable($ffmpegBin)) {
+                $thumbDir = dirname($thumbPath);
+                if (!is_dir($thumbDir)) {
+                    @mkdir($thumbDir, 0777, true);
+                }
+                $seekTime = $time;
+                if ($res['duration'] > 0 && $res['duration'] < $seekTime) {
+                    $seekTime = max(0, $res['duration'] / 2);
+                }
+                $escapedThumb = escapeshellarg($thumbPath);
+                $cmd = $ffmpegBin . " -y -ss " . escapeshellarg($seekTime) . " -i " . $escapedVideo . " -vframes 1 -q:v 2 " . $escapedThumb . " 2>/dev/null";
+                @shell_exec($cmd);
+                if (is_file($thumbPath) && filesize($thumbPath) > 0) {
+                    $res['hasthumb'] = 1;
+                    @chmod($thumbPath, 0664);
+                }
+            }
+        }
+
+        return $res;
+    }
 }
