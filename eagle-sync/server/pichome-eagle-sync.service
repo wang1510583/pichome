@@ -1,0 +1,29 @@
+[Unit]
+Description=Pichome and Eagle synchronization bridge
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wangjiafeng
+Group=www-data
+Environment=NODE_ENV=production
+Environment=SYNC_HOST=127.0.0.1
+Environment=SYNC_PORT=43127
+Environment=SYNC_LIBRARY_ID=zOGqBF
+Environment=SYNC_LIBRARY_NAME=参考库
+Environment=SYNC_LIBRARY_PATH=/mnt/photobackup/eagle-libraries/参考库.library
+Environment=SYNC_STATE_FILE=/var/lib/pichome-eagle-sync/sync-state.json
+StateDirectory=pichome-eagle-sync
+ExecStart=/usr/bin/node /home/wangjiafeng/Eagle同步插件/server/server.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/mnt/photobackup/eagle-libraries/参考库.library
+ReadWritePaths=/var/www/filepress/data
+
+[Install]
+WantedBy=multi-user.target

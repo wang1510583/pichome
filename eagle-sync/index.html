@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pichome Sync</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <img class="logo" src="logo.png" alt="Pichome Sync" />
+        <div class="hero-copy">
+          <p class="eyebrow">Pichome Sync · 0.5.1</p>
+          <h1>素材同步</h1>
+          <p class="subtitle">通过 Tailscale 连接 Pichome 与 Eagle</p>
+        </div>
+      </header>
+
+      <section class="mode-panel" aria-label="同步方式">
+        <button id="oneWayButton" class="mode-button one-way" type="button" aria-pressed="false">
+          <span class="mode-icon" aria-hidden="true">→</span>
+          <span class="mode-copy"><strong>自动单向</strong><small>Pichome 自动同步到 Eagle</small></span>
+          <span class="mode-state">开启</span>
+        </button>
+
+        <button id="twoWayButton" class="mode-button two-way" type="button" aria-pressed="false">
+          <span class="mode-icon" aria-hidden="true">↔</span>
+          <span class="mode-copy"><strong>自动双向</strong><small>同步新增、分类移动与删除</small></span>
+          <span class="mode-state">开启</span>
+        </button>
+
+        <button id="syncButton" class="mode-button manual" type="button" disabled>
+          <span class="mode-icon" aria-hidden="true">↓</span>
+          <span class="mode-copy"><strong>手动同步</strong><small>按更多设置中的数量立即导入</small></span>
+          <span class="mode-state">执行</span>
+        </button>
+      </section>
+
+      <section class="library-counts" aria-label="两端素材数量" aria-live="polite">
+        <div class="count-item pichome-count">
+          <span class="count-label">Pichome</span>
+          <strong id="pichomeItemCount">--</strong>
+          <small>个有效素材</small>
+        </div>
+        <span class="count-connector" aria-hidden="true">↔</span>
+        <div class="count-item eagle-count">
+          <span class="count-label">Eagle</span>
+          <strong id="eagleItemCount">--</strong>
+          <small>个受管素材</small>
+        </div>
+      </section>
+
+      <section class="activity-card" aria-live="polite">
+        <div class="activity-heading">
+          <span class="activity-dot"></span>
+          <strong id="syncStatus">总开关已关闭</strong>
+        </div>
+        <p id="statusHint">同步已暂停；设置和进度会保留。</p>
+        <div class="progress-group">
+          <div class="progress-meta">
+            <span>总进度</span>
+            <span id="overallProgressText">等待同步</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="总同步进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="progressBar"></span>
+          </div>
+        </div>
+        <div class="progress-group current-item-progress">
+          <div class="progress-meta">
+            <span id="currentItemName" title="等待同步">当前素材：等待同步</span>
+            <span id="itemProgressText">0%</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="当前素材传输进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="itemProgressBar"></span>
+          </div>
+        </div>
+        <p id="syncResult" class="result" role="status">选择一种同步方式开始。</p>
+      </section>
+
+      <details class="more-settings">
+        <summary>
+          <span>更多设置</span>
+          <span class="summary-hint">连接、数量与环境</span>
+        </summary>
+        <div class="settings-content">
+          <section class="setting-group master-row">
+            <div>
+              <p class="label">同步总开关</p>
+              <p id="modeHint" class="setting-note">未开启自动同步</p>
+            </div>
+            <label class="switch" aria-label="同步总开关">
+              <input id="syncToggle" type="checkbox" />
+              <span class="slider"></span>
+            </label>
+            <input id="oneWayToggle" type="checkbox" hidden />
+            <input id="twoWayToggle" type="checkbox" hidden />
+          </section>
+
+          <section class="setting-group">
+            <div class="group-heading">
+              <div><p class="label">连接设置</p><h2>Tailscale 桥接</h2></div>
+              <span id="remoteCount" class="pill">未连接</span>
+            </div>
+            <label for="serverUrl">服务器 URL</label>
+            <input id="serverUrl" type="url" spellcheck="false" value="https://wang.tail26a65a.ts.net:8452/" />
+            <div class="minor-actions">
+              <button id="saveButton" class="small-button secondary" type="button">保存</button>
+              <button id="testButton" class="small-button primary" type="button">测试连接</button>
+            </div>
+            <p id="connectionResult" class="result" role="status">尚未测试连接</p>
+          </section>
+
+          <section class="setting-group compact-grid">
+            <label for="librarySelect">Pichome 素材库</label>
+            <select id="librarySelect" disabled><option value="">请先测试连接</option></select>
+            <label for="batchSize">手动同步数量</label>
+            <input id="batchSize" type="number" min="1" step="1" value="3" />
+          </section>
+
+          <section class="setting-group environment">
+            <div class="group-heading">
+              <div><p class="label">Eagle 环境</p><h2 id="pluginState">正在初始化</h2></div>
+              <span id="runtimeBadge" class="pill pending">正在检测</span>
+            </div>
+            <dl>
+              <div><dt>当前素材库</dt><dd id="libraryName">正在读取</dd></div>
+              <div><dt>素材库路径</dt><dd id="libraryPath">正在读取</dd></div>
+            </dl>
+          </section>
+        </div>
+      </details>
+
+      <footer>删除进入回收站 · 并发变化会暂停为冲突</footer>
+    </main>
+    <script src="js/plugin.js"></script>
+  </body>
+</html>

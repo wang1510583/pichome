@@ -1,0 +1,29 @@
+{
+  "id": "PHSYNC20AUG26",
+  "version": "0.5.1",
+  "platform": "all",
+  "arch": "all",
+  "name": "Pichome Sync",
+  "logo": "/logo.png",
+  "keywords": ["Pichome", "同步", "Tailscale"],
+  "devTools": false,
+  "main": {
+    "url": "index.html",
+    "serviceMode": true,
+    "width": 560,
+    "height": 680,
+    "minWidth": 500,
+    "minHeight": 560,
+    "maxWidth": 760,
+    "maxHeight": 980,
+    "alwaysOnTop": false,
+    "frame": true,
+    "fullscreenable": false,
+    "maximizable": false,
+    "minimizable": true,
+    "resizable": true,
+    "backgroundColor": "#f5f7fb",
+    "multiple": false,
+    "runAfterInstall": true
+  }
+}
