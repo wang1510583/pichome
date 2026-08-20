@@ -7,6 +7,7 @@
 - `web/`：基于 [FilePress](https://github.com/zyx0814/FilePress) `ea23905` 的网页端源码，并包含本机部署中的 Pichome 定制。
 - `android/`：Pichome Android WebView 客户端源码。
 - `eagle-sync/`：通过 Tailscale 在 Pichome 与其他电脑的 Eagle 之间同步素材的插件、桥接服务与最新安装包。
+- `releases/`：可直接安装的公开构建产物；当前包含不嵌入私人 App Access Tag 的 Android 调试版 APK。
 
 ## 当前定制
 
@@ -24,6 +25,8 @@
 仓库不包含生产服务器的 `web/config/config.php`、上传素材、缩略图、日志、锁文件、模板缓存、Android 本地 SDK 路径或真实 App Access Tag。
 
 Android 构建前，将 `android/local.properties.example` 复制为 `android/local.properties`，填写本机 Android SDK 路径；只有服务器要求时才填写 `pichome.appAccessTag`。
+
+公开 APK：`releases/Pichome-Android-1.0.25-debug-public.apk`。该构建使用 Android 调试签名且不包含私人 App Access Tag；受保护的服务器入口仍需正常认证。
 
 ## 许可证
 
