@@ -20,7 +20,7 @@
 	:islikeness="true"
 	apptype="pichome">
 	<template v-slot:operation="{ data, active }">
-		<template  v-if="data.share || data.down">
+		<template v-if="data.share || data.download || data.down || LeftCurrenType != 'recycle'">
 			<template v-if="ImageProps.layout=='rowGrid' || ImageProps.layout=='imageList' || ImageProps.layout=='waterFall'">
 				<div class="operation-box" @click.stop  :style="{opacity:data.isdropdown?1:''}">
 					<el-dropdown @command="ImageOperationf" @visible-change="data.isdropdown = !data.isdropdown">
@@ -60,6 +60,15 @@
 									@click.stop>
 									<el-icon><Position /></el-icon>
                                     {lang publish}
+								</el-dropdown-item>
+								<el-dropdown-item 
+									v-if="LeftCurrenType != 'recycle'"
+									:command="ImageOperationVal('delete',data)"
+									role="menuitem"
+									style="color: var(--el-color-danger);"
+									@click.stop>
+									<el-icon><Delete /></el-icon>
+									删除素材
 								</el-dropdown-item>
 							</el-dropdown-menu>
 						</template>
@@ -102,6 +111,15 @@
 									<el-icon><Position /></el-icon>
                                     {lang publish}
 								</el-dropdown-item>
+							<el-dropdown-item 
+								v-if="LeftCurrenType != 'recycle'"
+								:command="ImageOperationVal('delete',data)"
+								role="menuitem"
+								style="color: var(--el-color-danger);"
+								@click.stop>
+								<el-icon><Delete /></el-icon>
+								删除素材
+							</el-dropdown-item>
 						</el-dropdown-menu>
 					</template>
 				</el-dropdown>
@@ -116,26 +134,24 @@
 </Image-Layout>
 
 <el-popover
-	popper-class="isdropdown header-dropdown-menu"
+	popper-class="ImageRightMenu isdropdown header-dropdown-menu"
 	trigger="click"
 	ref="ImageRightMenu"
-	:popper-style="{top: ImageMenu.top, left: ImageMenu.left}"
+	:popper-style="{top: ImageMenu.top, left: ImageMenu.left, maxHeight: 'calc(100dvh - 30px)', overflowY: 'auto'}"
     v-model:visible="ImageMenu.show"
 	width="auto"
 	:show-arrow="false">
     <ul class="el-dropdown-menu">
-		<template>
-			<li 
-				class="el-dropdown-menu__item" 
-				v-show="ImageMenu.operation.cove"
-				@click.stop.native="ImageOperation('cover')">
-				<i class="el-icon">
-					<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" data-v-029747aa=""><path fill="currentColor" d="M160 160v704h704V160H160zm-32-64h768a32 32 0 0 1 32 32v768a32 32 0 0 1-32 32H128a32 32 0 0 1-32-32V128a32 32 0 0 1 32-32z"></path><path fill="currentColor" d="M384 288q64 0 64 64t-64 64q-64 0-64-64t64-64zM185.408 876.992l-50.816-38.912L350.72 556.032a96 96 0 0 1 134.592-17.856l1.856 1.472 122.88 99.136a32 32 0 0 0 44.992-4.864l216-269.888 49.92 39.936-215.808 269.824-.256.32a96 96 0 0 1-135.04 14.464l-122.88-99.072-.64-.512a32 32 0 0 0-44.8 5.952L185.408 876.992z"></path></svg>
-				</i>
-				{lang Set_folder_cover}
-			</li>
-			<li v-if="ImageMenu.operation.cove" class="el-dropdown-menu__item--divided"></li>
-		</template>
+		<li 
+			class="el-dropdown-menu__item" 
+			v-show="ImageMenu.operation.cove"
+			@click.stop.native="ImageOperation('cover')">
+			<i class="el-icon">
+				<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" data-v-029747aa=""><path fill="currentColor" d="M160 160v704h704V160H160zm-32-64h768a32 32 0 0 1 32 32v768a32 32 0 0 1-32 32H128a32 32 0 0 1-32-32V128a32 32 0 0 1 32-32z"></path><path fill="currentColor" d="M384 288q64 0 64 64t-64 64q-64 0-64-64t64-64zM185.408 876.992l-50.816-38.912L350.72 556.032a96 96 0 0 1 134.592-17.856l1.856 1.472 122.88 99.136a32 32 0 0 0 44.992-4.864l216-269.888 49.92 39.936-215.808 269.824-.256.32a96 96 0 0 1-135.04 14.464l-122.88-99.072-.64-.512a32 32 0 0 0-44.8 5.952L185.408 876.992z"></path></svg>
+			</i>
+			{lang Set_folder_cover}
+		</li>
+		<li v-if="ImageMenu.operation.cove" class="el-dropdown-menu__item--divided"></li>
 		
 		<li
 			class="el-dropdown-menu__item" 
@@ -185,43 +201,38 @@
 			<el-icon><search /></el-icon>
 			{lang search_picture}
 		</li>
-		<template>
-			<li class="el-dropdown-menu__item--divided" v-if="ImageMenu.operation.share || ImageMenu.operation.down || ImageMenu.operation.link || ImageMenu.operation.location" style="margin: 4px 0;"></li>
-			<li 
-				class="el-dropdown-menu__item" 
-				v-if="ImageMenu.operation.delfolder"
-				@click.stop="ImageOperation('folderdel')">
-				<el-icon><Remove /></el-icon>
-                {lang remove_from_folder}
-			</li>
-			<li 
-				class="el-dropdown-menu__item" 
-				v-if="ImageMenu.operation.delete"
-				role="menuitem"
-				style="color: var(--el-color-danger);"
-				@click.stop="ImageOperation('delete')">
-				<el-icon><Delete /></el-icon>
-                删除素材
-			</li>
-			<li
-				class="el-dropdown-menu__item" 
-				v-if="ImageMenu.operation.reduction"
-				@click.stop="ImageOperation('reduction')">
-				<el-icon><Refresh-Right /></el-icon>
-				{lang restore}
-			</li>
-			<li
-				class="el-dropdown-menu__item" 
-				v-if="ImageMenu.operation.permanentDelete"
-				@click.stop="ImageOperation('permanentDelete')">
-				<el-icon><Delete /></el-icon>
-                {lang final_delete}
-			</li>
-		</template>
-
-		
+		<li class="el-dropdown-menu__item--divided" v-if="ImageMenu.operation.share || ImageMenu.operation.down || ImageMenu.operation.link || ImageMenu.operation.location" style="margin: 4px 0;"></li>
+		<li 
+			class="el-dropdown-menu__item" 
+			v-if="ImageMenu.operation.delfolder"
+			@click.stop="ImageOperation('folderdel')">
+			<el-icon><Remove /></el-icon>
+            {lang remove_from_folder}
+		</li>
+		<li 
+			class="el-dropdown-menu__item" 
+			v-if="ImageMenu.operation.delete"
+			role="menuitem"
+			style="color: var(--el-color-danger);"
+			@click.stop="ImageOperation('delete')">
+			<el-icon><Delete /></el-icon>
+            删除素材
+		</li>
+		<li
+			class="el-dropdown-menu__item" 
+			v-if="ImageMenu.operation.reduction"
+			@click.stop="ImageOperation('reduction')">
+			<el-icon><Refresh-Right /></el-icon>
+			{lang restore}
+		</li>
+		<li
+			class="el-dropdown-menu__item" 
+			v-if="ImageMenu.operation.permanentDelete"
+			@click.stop="ImageOperation('permanentDelete')">
+			<el-icon><Delete /></el-icon>
+            {lang final_delete}
+		</li>
 	</ul>
-	
 </el-popover>
 <script type="text/javascript">
 	var MixinImage = {
@@ -280,7 +291,11 @@
 		methods:{
 			async ImageOperationf(data){
 				let self = this;
-				if(data.type == 'down'){
+				if(data.type == 'delete'){
+					self.ImageMenu.data = data.resourcedata;
+					self.RightActiveRid = [data.resourcedata.rid];
+					self.ImageOperation('delete');
+				}else if(data.type == 'down'){
 
 					window.open(SITEURL+MOD_URL+'&op=download&dpath='+data.resourcedata.dpath);
 				}else if(data.type == 'collect'){
@@ -344,41 +359,30 @@
 				if(this.LeftCurrenType == 'recycle'){
 					var arr = ['share','down','reduction','permanentDelete'];
 				}else if(this.LeftCurrenType == 'filelist'){
-					// if(self.RightActiveRid.length){
-					// 	var arr = ['delfolder','delete'];
-					// }else{
-						var arr = ['share','cove','down','location','delfolder','delete'];
-						if(item.link){
-							arr.push('link');
-						}
-			
-					// }
+					var arr = ['share','cove','down','location','delfolder','delete'];
+					if(item && item.link){
+						arr.push('link');
+					}
 				}else{
-					// console.log(self.RightActiveRid);
-					// if(self.RightActiveRid.length){
-					// 	var arr = ['delete'];
-					// }else{
-						var arr = ['share','down','location','delete'];
-						if(item.link){
-							arr.push('link');
-						}
-					// }
-					
+					var arr = ['share','down','location','delete'];
+					if(item && item.link){
+						arr.push('link');
+					}
 				}
-				if(parseFloat(item.allowImageSearch)){
+				if(item && parseFloat(item.allowImageSearch)){
 					arr.push('allowImageSearch');
 				}
-				if(!item.download){
+				if(item && !item.download){
 					let findex = arr.findIndex(function(current){
 						return current == 'down';
 					});
-					arr.splice(findex,1);
+					if(findex > -1) arr.splice(findex,1);
 				}
-				if(!item.share){
+				if(item && !item.share){
 					let findex = arr.findIndex(function(current){
 						return current == 'share';
 					});
-					arr.splice(findex,1);
+					if(findex > -1) arr.splice(findex,1);
 				}
 				for(var i in this.ImageMenu.operation){
 					if(arr.indexOf(i)>-1){
@@ -388,33 +392,64 @@
 				
 				this.ImageMenu.data = item;
 				let status = this.RightActiveRid.length === data.checkedkeys.length && this.RightActiveRid.every((v, i) => v === data.checkedkeys[i]);
-				if(!status){
+				if(!status && item){
 					this.ImageClick({//单机事件
 						id:item.rid,
 						CheckedKeys:data.checkedkeys
 					});
 				}
 				
-				let menu = self.$refs.ImageRightMenu.popperRef.contentRef;
-				var evt = event || window.event;
-				var clientWidth = document.documentElement.clientWidth || document.body.clientWidth ;
-				var scrollLeft = document.documentElement.scrollLeft || document.body.scrollLeft;
-			
-				var clientHeight = document.documentElement.clientHeight || document.body.clientHeight ;
-				var scrollTop = document.documentElement.scrollTop || document.body.scrollTop ;
-				//给left和top分别赋值为鼠标的位置；
-				self.ImageMenu.left = evt.pageX+"px";
-				self.ImageMenu.top = evt.pageY+"px";
-				//如果鼠标右边放不下菜单，就把left的值的改了
-				if(evt.pageX+100>clientWidth+scrollLeft){//菜单应该在鼠标左边；
-					var left1 = evt.pageX-100;
-					self.ImageMenu.left = left1+"px";
+				var evt = event || window.event || {};
+				var clientWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+				var clientHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+				var scrollLeft = window.pageXOffset || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+				var scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+
+				var clientX = 0;
+				var clientY = 0;
+				if (typeof evt.clientX === 'number' && !isNaN(evt.clientX) && evt.clientX > 0) {
+					clientX = evt.clientX;
+				} else if (evt.touches && evt.touches[0]) {
+					clientX = evt.touches[0].clientX;
+				} else if (evt.changedTouches && evt.changedTouches[0]) {
+					clientX = evt.changedTouches[0].clientX;
+				} else if (typeof evt.pageX === 'number' && !isNaN(evt.pageX)) {
+					clientX = evt.pageX - scrollLeft;
+				} else {
+					clientX = clientWidth / 2;
 				}
-				//如果鼠标下边放不下菜单，就把top的值的改了
-				if(evt.pageY+100>clientHeight+scrollTop){
-					var top1 = (evt.pageY-100);
-					self.ImageMenu.top = top1+"px";
+
+				if (typeof evt.clientY === 'number' && !isNaN(evt.clientY) && evt.clientY > 0) {
+					clientY = evt.clientY;
+				} else if (evt.touches && evt.touches[0]) {
+					clientY = evt.touches[0].clientY;
+				} else if (evt.changedTouches && evt.changedTouches[0]) {
+					clientY = evt.changedTouches[0].clientY;
+				} else if (typeof evt.pageY === 'number' && !isNaN(evt.pageY)) {
+					clientY = evt.pageY - scrollTop;
+				} else {
+					clientY = clientHeight / 2;
 				}
+
+				var menuWidth = 190;
+				var menuHeight = 360;
+
+				var posX = clientX + scrollLeft;
+				if (clientX + menuWidth > clientWidth - 10) {
+					posX = Math.max(scrollLeft + 10, scrollLeft + clientWidth - menuWidth - 10);
+				}
+
+				var posY = clientY + scrollTop;
+				if (clientY + menuHeight > clientHeight - 20) {
+					if (clientY - menuHeight > 20) {
+						posY = clientY + scrollTop - menuHeight;
+					} else {
+						posY = scrollTop + Math.max(10, clientHeight - menuHeight - 20);
+					}
+				}
+
+				self.ImageMenu.left = posX + "px";
+				self.ImageMenu.top = posY + "px";
 				
 				self.$nextTick(function(){
 					self.ImageMenu.show = true;
@@ -782,6 +817,108 @@
 		},
 		mounted(){
 			var self = this;
+			// 安卓端与移动端触屏长按素材卡片弹出右键菜单 (2026-08-19)
+			let touchTimer = null;
+			let touchStartPos = { x: 0, y: 0 };
+			let longPressed = false;
+			let currentMatch = null;
+
+			const clearLongPressTimer = () => {
+				if (touchTimer) {
+					clearTimeout(touchTimer);
+					touchTimer = null;
+				}
+			};
+
+			const findCardAndData = (el) => {
+				if (!el || !el.closest) return null;
+				const card = el.closest('[data-rid]');
+				if (!card) return null;
+				const rid = card.getAttribute('data-rid');
+				if (!rid) return null;
+				const list = (self.ImageDataParam && self.ImageDataParam.data) || (self.$refs.RefImageLayout && self.$refs.RefImageLayout.NewImageData) || [];
+				const item = list.find(it => it && String(it.rid) === String(rid));
+				return item ? { card, rid, item } : null;
+			};
+
+			document.addEventListener('touchstart', (e) => {
+				if (e.touches.length !== 1) {
+					clearLongPressTimer();
+					return;
+				}
+				const touch = e.touches[0];
+				touchStartPos = { x: touch.clientX, y: touch.clientY };
+				longPressed = false;
+
+				const target = e.target;
+				if (target.closest && target.closest('.el-popover, .el-dropdown__popper, .isdropdown, .operation-box, .pichome-detail-nav')) {
+					clearLongPressTimer();
+					return;
+				}
+
+				const match = findCardAndData(target);
+				if (!match) {
+					clearLongPressTimer();
+					return;
+				}
+
+				currentMatch = match;
+				clearLongPressTimer();
+				touchTimer = setTimeout(() => {
+					longPressed = true;
+					window.__pichomeLongPressed = true;
+					setTimeout(() => {
+						window.__pichomeLongPressed = false;
+					}, 600);
+
+					if (navigator.vibrate) {
+						try { navigator.vibrate(50); } catch (ignore) {}
+					}
+
+					self.ImageContextmenu({
+						target: {
+							clientX: touchStartPos.x,
+							clientY: touchStartPos.y,
+							pageX: touchStartPos.x + (window.pageXOffset || document.documentElement.scrollLeft || 0),
+							pageY: touchStartPos.y + (window.pageYOffset || document.documentElement.scrollTop || 0)
+						},
+						data: currentMatch.item,
+						checkedkeys: [currentMatch.rid]
+					});
+				}, 450);
+			}, { passive: true });
+
+			document.addEventListener('touchmove', (e) => {
+				if (!touchTimer) return;
+				if (e.touches.length !== 1) {
+					clearLongPressTimer();
+					return;
+				}
+				const touch = e.touches[0];
+				const dx = Math.abs(touch.clientX - touchStartPos.x);
+				const dy = Math.abs(touch.clientY - touchStartPos.y);
+				if (dx > 8 || dy > 8) {
+					clearLongPressTimer();
+				}
+			}, { passive: true });
+
+			document.addEventListener('touchend', (e) => {
+				clearLongPressTimer();
+				if (longPressed) {
+					e.preventDefault();
+				}
+			}, { passive: false });
+
+			document.addEventListener('touchcancel', () => {
+				clearLongPressTimer();
+			}, { passive: true });
+
+			document.addEventListener('click', (e) => {
+				if (window.__pichomeLongPressed) {
+					e.preventDefault();
+					e.stopImmediatePropagation();
+				}
+			}, true);
 		}
 	};
 </script>
