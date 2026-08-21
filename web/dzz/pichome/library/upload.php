@@ -47,12 +47,12 @@ function pichome_remote_absolute_url($base, $location) {
     return $origin . $directory . $location;
 }
 
-function pichome_remote_download_image($sourceUrl) {
+function pichome_remote_download_media($sourceUrl) {
     global $_G;
     if (!function_exists('curl_init')) return array('error' => '服务器未启用远程下载组件');
-    $maxBytes = 100 * 1024 * 1024;
+    $maxBytes = 2 * 1024 * 1024 * 1024;
     $temp = tempnam($_G['setting']['attachdir'] . 'cache/', 'pichome_remote_');
-    if (!$temp) return array('error' => '无法创建远程图片临时文件');
+    if (!$temp) return array('error' => '无法创建远程素材临时文件');
     $lastHeaders = array();
     $finalUrl = trim($sourceUrl);
 
@@ -63,22 +63,22 @@ function pichome_remote_download_image($sourceUrl) {
         $port = isset($parts['port']) ? intval($parts['port']) : ($scheme === 'https' ? 443 : 80);
         if (!in_array($scheme, array('http', 'https'), true) || !$host || isset($parts['user']) || isset($parts['pass'])) {
             @unlink($temp);
-            return array('error' => '只支持公开的 HTTP/HTTPS 图片地址');
+            return array('error' => '只支持公开的 HTTP/HTTPS 素材地址');
         }
         if (($scheme === 'http' && $port !== 80) || ($scheme === 'https' && $port !== 443)) {
             @unlink($temp);
-            return array('error' => '远程图片地址端口不受支持');
+            return array('error' => '远程素材地址端口不受支持');
         }
         $ip = pichome_remote_public_ipv4($host);
         if (!$ip) {
             @unlink($temp);
-            return array('error' => '远程图片地址不是可访问的公网地址');
+            return array('error' => '远程素材地址不是可访问的公网地址');
         }
 
         $output = @fopen($temp, 'wb');
         if (!$output) {
             @unlink($temp);
-            return array('error' => '无法写入远程图片临时文件');
+            return array('error' => '无法写入远程素材临时文件');
         }
         $headers = array();
         $received = 0;
@@ -86,9 +86,9 @@ function pichome_remote_download_image($sourceUrl) {
         curl_setopt_array($ch, array(
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_CONNECTTIMEOUT => 12,
-            CURLOPT_TIMEOUT => 120,
-            CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; Pichome Remote Image Import/1.0)',
-            CURLOPT_HTTPHEADER => array('Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*;q=0.9,*/*;q=0.1'),
+            CURLOPT_TIMEOUT => 1800,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; Pichome Remote Media Import/1.0)',
+            CURLOPT_HTTPHEADER => array('Accept: video/mp4,video/webm,video/quicktime,video/*;q=0.9,image/webp,image/svg+xml,image/*;q=0.8,*/*;q=0.1'),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_RESOLVE => array($host . ':' . $port . ':' . $ip),
@@ -113,20 +113,20 @@ function pichome_remote_download_image($sourceUrl) {
 
         if ($received > $maxBytes) {
             @unlink($temp);
-            return array('error' => '在线图片超过 100 MB，已停止下载');
+            return array('error' => '在线素材超过 2 GB，已停止下载');
         }
         if ($status >= 300 && $status < 400 && !empty($headers['location'])) {
             $next = pichome_remote_absolute_url($finalUrl, $headers['location']);
             if (!$next) {
                 @unlink($temp);
-                return array('error' => '远程图片重定向地址无效');
+                return array('error' => '远程素材重定向地址无效');
             }
             $finalUrl = $next;
             continue;
         }
         if (!$ok || $status < 200 || $status >= 300 || $received < 1) {
             @unlink($temp);
-            return array('error' => $curlError ? '下载在线图片失败：' . $curlError : '下载在线图片失败（HTTP ' . $status . '）');
+            return array('error' => $curlError ? '下载在线素材失败：' . $curlError : '下载在线素材失败（HTTP ' . $status . '）');
         }
         $lastHeaders = $headers;
         break;
@@ -134,14 +134,18 @@ function pichome_remote_download_image($sourceUrl) {
 
     if (!is_file($temp) || filesize($temp) < 1) {
         @unlink($temp);
-        return array('error' => '在线图片下载结果为空');
+        return array('error' => '在线素材下载结果为空');
     }
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime = strtolower(strval($finfo->file($temp)));
     $extensions = array(
         'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
         'image/webp' => 'webp', 'image/bmp' => 'bmp', 'image/x-ms-bmp' => 'bmp',
-        'image/svg+xml' => 'svg'
+        'image/svg+xml' => 'svg',
+        'video/mp4' => 'mp4', 'video/quicktime' => 'mov',
+        'video/x-matroska' => 'mkv', 'application/x-matroska' => 'mkv',
+        'video/webm' => 'webm', 'video/x-msvideo' => 'avi', 'video/avi' => 'avi',
+        'video/x-m4v' => 'm4v'
     );
     if (!isset($extensions[$mime])) {
         $sample = file_get_contents($temp, false, null, 0, 4096);
@@ -149,7 +153,7 @@ function pichome_remote_download_image($sourceUrl) {
             $mime = 'image/svg+xml';
         } else {
             @unlink($temp);
-            return array('error' => '拖入的在线地址不是受支持的图片');
+            return array('error' => '拖入的在线地址不是受支持的图片或视频文件');
         }
     }
     $extension = $extensions[$mime];
@@ -163,36 +167,37 @@ function pichome_remote_download_image($sourceUrl) {
     }
     $basename = pathinfo($name, PATHINFO_FILENAME);
     $basename = preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]+/u', '_', trim($basename));
-    if ($basename === '') $basename = 'online-image-' . date('Ymd-His');
+    if ($basename === '') $basename = 'online-media-' . date('Ymd-His');
     if (function_exists('mb_strcut')) $basename = mb_strcut($basename, 0, 160, 'UTF-8');
     else $basename = substr($basename, 0, 160);
     return array('path' => $temp, 'filename' => $basename . '.' . $extension, 'url' => $finalUrl, 'size' => filesize($temp));
 }
 
 if ($operation === 'remoteupload') {
+	@set_time_limit(1800);
     $request = pichome_remote_request_data();
     $appid = isset($request['appid']) ? trim($request['appid']) : '';
     $pfid = isset($request['pfid']) ? trim($request['pfid']) : '';
     $sourceUrl = isset($request['url']) ? trim($request['url']) : '';
     $appdata = $appid ? C::t('pichome_vapp')->fetch($appid) : array();
     if (!$appdata) pichome_remote_json(false, array(), '素材库不存在');
-    if (!in_array(intval($appdata['type']), array(0, 3), true)) pichome_remote_json(false, array(), '当前素材库不支持在线图片上传');
+    if (!in_array(intval($appdata['type']), array(0, 3), true)) pichome_remote_json(false, array(), '当前素材库不支持在线素材上传');
     if (intval($_G['adminid']) !== 1 && intval($appdata['uid']) !== intval($_G['uid'])) pichome_remote_json(false, array(), '没有素材库写入权限');
-    if (!$sourceUrl || strlen($sourceUrl) > 4096) pichome_remote_json(false, array(), '在线图片地址无效');
+    if (!$sourceUrl || strlen($sourceUrl) > 4096) pichome_remote_json(false, array(), '在线素材地址无效');
     if ($pfid && !DB::result_first('select fid from %t where fid=%s and appid=%s', array('pichome_folder', $pfid, $appid))) {
         pichome_remote_json(false, array(), '目标分类不存在');
     }
-    $download = pichome_remote_download_image($sourceUrl);
+    $download = pichome_remote_download_media($sourceUrl);
     if (!empty($download['error'])) pichome_remote_json(false, array(), $download['error']);
     try {
         $result = IO::uploadStream($download['path'], $download['filename'], $appid, $pfid, '', array());
     } catch (Throwable $error) {
         @unlink($download['path']);
-        pichome_remote_json(false, array(), '在线图片入库失败：' . $error->getMessage());
+        pichome_remote_json(false, array(), '在线素材入库失败：' . $error->getMessage());
     }
     @unlink($download['path']);
-    if (!$result || !empty($result['error'])) pichome_remote_json(false, array(), !empty($result['error']) ? $result['error'] : '在线图片入库失败');
-    pichome_remote_json(true, $result, '在线图片已添加');
+    if (!$result || !empty($result['error'])) pichome_remote_json(false, array(), !empty($result['error']) ? $result['error'] : '在线素材入库失败');
+    pichome_remote_json(true, $result, '在线素材已添加');
 }
 elseif($operation == 'upload'){//上传文件图标类
     include libfile( 'class/uploadhandler' );
@@ -241,7 +246,11 @@ elseif ( $operation == 'uploads' ) { //上传新文件(指新建)
 			$mimeExtensions = array(
 				'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
 				'image/webp' => 'webp', 'image/bmp' => 'bmp', 'image/x-ms-bmp' => 'bmp',
-				'image/svg+xml' => 'svg'
+				'image/svg+xml' => 'svg',
+				'video/mp4' => 'mp4', 'video/quicktime' => 'mov',
+				'video/x-matroska' => 'mkv', 'application/x-matroska' => 'mkv',
+				'video/webm' => 'webm', 'video/x-msvideo' => 'avi', 'video/avi' => 'avi',
+				'video/x-m4v' => 'm4v'
 			);
 			if (isset($mimeExtensions[$mime])) {
 				$uploadName .= '.' . $mimeExtensions[$mime];

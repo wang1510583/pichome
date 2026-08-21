@@ -509,7 +509,15 @@
 					'image/webp':'webp',
 					'image/bmp':'bmp',
 					'image/x-ms-bmp':'bmp',
-					'image/svg+xml':'svg'
+					'image/svg+xml':'svg',
+					'video/mp4':'mp4',
+					'video/quicktime':'mov',
+					'video/x-matroska':'mkv',
+					'application/x-matroska':'mkv',
+					'video/webm':'webm',
+					'video/x-msvideo':'avi',
+					'video/avi':'avi',
+					'video/x-m4v':'m4v'
 				};
 				const extension = extensions[String(file.type || '').toLowerCase()];
 				if(!extension) return null;
@@ -550,10 +558,16 @@
 						else textValues.push(value);
 					}
 				}
+				const videoUrls = [];
 				const imageUrls = [];
 				for(const html of htmlValues){
 					try{
 						const documentNode = new DOMParser().parseFromString(html, 'text/html');
+						documentNode.querySelectorAll('video[src], video source[src]').forEach(video => videoUrls.push(video.getAttribute('src')));
+						documentNode.querySelectorAll('a[href]').forEach(anchor => {
+							const href = anchor.getAttribute('href');
+							if(/\.(mp4|mov|mkv|webm|avi|m4v)(?:[?#]|$)/i.test(href || '')) videoUrls.push(href);
+						});
 						documentNode.querySelectorAll('img[src]').forEach(image => imageUrls.push(image.getAttribute('src')));
 					}catch(error){}
 				}
@@ -567,7 +581,7 @@
 						}
 					});
 				}
-				const candidates = imageUrls.length ? imageUrls : fallbackUrls;
+				const candidates = videoUrls.length ? videoUrls : (imageUrls.length ? imageUrls : fallbackUrls);
 				return [...new Set(candidates.map(url => String(url).replace(/&amp;/g, '&').replace(/[),.;]+$/, '')).filter(url => /^https?:\/\//i.test(url)))].slice(0, 20);
 			},
 			async ImageUploadRemoteUrls(urls) {
@@ -577,7 +591,7 @@
 				if(fid === 'root' || fid === '0') fid = '';
 				let succeeded = 0;
 				const errors = [];
-				this.$message({type:'info', message:'正在下载 '+urls.length+' 张在线图片…'});
+				this.$message({type:'info', message:'正在下载 '+urls.length+' 个在线素材…'});
 				for(const url of urls){
 					try{
 						const {data: response} = await axios.post(MOD_URL+'&op=library&do=upload&operation=remoteupload', {
@@ -598,8 +612,8 @@
 					else this.LeftTreeGetFolderNum();
 					if(this.LeftGetAllNum) this.LeftGetAllNum();
 				}
-				if(errors.length) this.$message({type:'warning', message:'在线图片添加 '+succeeded+' 张，失败 '+errors.length+' 张：'+errors[0]});
-				else this.$message({type:'success', message:'已添加 '+succeeded+' 张在线图片'});
+				if(errors.length) this.$message({type:'warning', message:'在线素材添加 '+succeeded+' 个，失败 '+errors.length+' 个：'+errors[0]});
+				else this.$message({type:'success', message:'已添加 '+succeeded+' 个在线素材'});
 			},
 			async ImageUploadDropEvent(e) {
 				const self = this;
