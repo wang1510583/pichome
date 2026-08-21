@@ -1,4 +1,4 @@
-# Pichome Sync 0.5.1
+# Pichome Sync 0.5.2
 
 通过 Tailscale 在 Linux 服务器上的 Pichome/Eagle 素材库与其他电脑的 Eagle 之间同步。
 
@@ -12,6 +12,10 @@
 - 升级后首次双向扫描只建立基线，不执行历史移动或删除。
 - 两端同时变化时，操作时间相差超过 10 秒会自动采用较新操作；时间过近才暂停为冲突。
 - 明确删除会记录在服务端 `/var/lib/pichome-eagle-sync/sync-state.json`，单纯缺少素材不会被误判为删除。
+- 服务端会把已确认删除的素材作为 tombstone 返回，Eagle 回收站素材不再被误报为“待处理冲突”。
+- Pichome 未分类素材映射到受管目录内专用的“未分类”文件夹；旧版已经同步到受管根目录的素材会原地迁移，不重新导入文件。
+- 新建文件夹严格按 Pichome 的同级顺序创建；Eagle 官方 API 暂未开放已有文件夹的同级重排接口。
+- 已同步素材会分批校准导入时间，使 Eagle 按导入时间排序时与 Pichome 默认排序一致，原文件不会重新传输。
 
 ## 界面
 
@@ -29,7 +33,7 @@
 
 ## 安装
 
-双击 `Pichome-Sync-0.5.1.eagleplugin`，或将其拖入 Eagle 窗口。插件作为后台服务启动；点击插件图标时会显示设置窗口。
+双击 `Pichome-Sync-0.5.2.eagleplugin`，或将其拖入 Eagle 窗口。插件作为后台服务启动；点击插件图标时会显示设置窗口。
 
 1. 确认两台电脑都连接同一 Tailscale。
 2. 点击“测试连接”。
@@ -42,4 +46,4 @@
 - systemd 服务：`pichome-eagle-sync.service`
 - 本地监听：`127.0.0.1:43127`
 - Tailscale Serve：`https://wang.tail26a65a.ts.net:8452/`
-- API 版本：0.5.1（下载、上传、分类更新、软删除、操作日志和最新操作判定）
+- API 版本：0.5.2（下载、上传、分类更新、未分类映射、软删除 tombstone、操作日志和最新操作判定）

@@ -26,6 +26,7 @@
       imported: {},
       localUploads: {},
       syncBaselines: {},
+      sortAligned: {},
       conflicts: {}
     };
   }
@@ -274,14 +275,23 @@
   async function ensureFolderTargets(library, sourceFolders, requiredIds) {
     const localFolders = flattenLocalFolders(await eagle.folder.getAll());
     const localByMarker = new Map();
+    let unclassified = null;
     for (const folder of localFolders) {
       const marker = String(folder.description || "").match(/pichome-sync:(?:library|folder):([A-Za-z0-9_-]+)/);
       if (marker) localByMarker.set(marker[1], folder);
+      if (String(folder.description || "").includes(`pichome-sync:unclassified:${library.id}`)) unclassified = folder;
     }
     let root = localByMarker.get(library.id);
     if (!root) {
       root = await eagle.folder.create({ name: `Pichome · ${library.name}`, description: `pichome-sync:library:${library.id}` });
       localByMarker.set(library.id, root);
+    }
+    if (!unclassified) {
+      unclassified = await eagle.folder.create({
+        name: "未分类",
+        description: `Pichome 中没有所属文件夹的素材\npichome-sync:unclassified:${library.id}`,
+        parent: root.id
+      });
     }
     const sourceById = new Map(sourceFolders.map((folder) => [folder.id, folder]));
     const creating = new Map();
@@ -305,7 +315,7 @@
     }
     const result = new Map();
     for (const sourceId of requiredIds) result.set(sourceId, await ensureSourceFolder(sourceId));
-    return { root, sourceToLocal: result };
+    return { root, unclassified, sourceToLocal: result };
   }
 
   function downloadFile(url, targetPath, onProgress, expectedSize = 0) {
@@ -356,9 +366,13 @@
         folders: folderIds,
         annotation: `${source.annotation || ""}${source.annotation ? "\n\n" : ""}[Pichome Sync ID: ${source.id}]`
       });
-      if (source.star) {
+      if (source.star || Number(source.importedAt) > 0) {
         const localItem = await eagle.item.getById(localId);
-        if (localItem) { localItem.star = source.star; await localItem.save(); }
+        if (localItem) {
+          if (source.star) localItem.star = source.star;
+          if (Number(source.importedAt) > 0) localItem.importedAt = Number(source.importedAt);
+          await localItem.save();
+        }
       }
       return localId;
     } finally {
@@ -398,7 +412,7 @@
         totalItems = Number(page.total) || totalItems;
         setOverallProgress(cursor, totalItems);
         if (!page.items.length) { reachedEnd = true; break; }
-        const neededFolders = new Set(page.items.flatMap((item) => item.folders || []));
+        const neededFolders = new Set((folderData.folders || []).map((folder) => folder.id));
         const targets = await ensureFolderTargets(library, folderData.folders || [], neededFolders);
         for (const source of page.items) {
           if (automatic) {
@@ -432,7 +446,7 @@
             delete libraryImported[source.id];
           }
           const folderIds = (source.folders || []).map((id) => targets.sourceToLocal.get(id)?.id).filter(Boolean);
-          if (!folderIds.length) folderIds.push(targets.root.id);
+          if (!folderIds.length) folderIds.push(targets.unclassified.id);
           libraryImported[source.id] = await importItem(source, folderIds, (loaded, total) => setItemProgress(source.name, loaded, total));
           setItemProgress(source.name, 1, 1, true);
           added += 1;
@@ -535,9 +549,10 @@
     await ensureFolderTargets(library, remoteFolders || [], requiredIds);
     const folders = flattenLocalFolders(await eagle.folder.getAll());
     const root = folders.find((folder) => String(folder.description || "").includes(`pichome-sync:library:${library.id}`));
+    const unclassified = folders.find((folder) => String(folder.description || "").includes(`pichome-sync:unclassified:${library.id}`));
     const remoteByLocal = new Map();
     const localByRemote = new Map();
-    const managedLocalIds = new Set(root ? [root.id] : []);
+    const managedLocalIds = new Set([root?.id, unclassified?.id].filter(Boolean));
     for (const folder of folders) {
       const marker = String(folder.description || "").match(/pichome-sync:folder:([A-Za-z0-9_-]+)/);
       if (marker) {
@@ -546,7 +561,7 @@
         managedLocalIds.add(folder.id);
       }
     }
-    return { root, remoteByLocal, localByRemote, managedLocalIds };
+    return { root, unclassified, remoteByLocal, localByRemote, managedLocalIds };
   }
 
   function localStateForItem(item, folderContext) {
@@ -593,8 +608,11 @@
       const baselines = { ...(syncBaselines[libraryId] || {}) };
       const allConflicts = { ...(settings.conflicts || {}) };
       const conflicts = { ...(allConflicts[libraryId] || {}) };
+      const allSortAligned = { ...(settings.sortAligned || {}) };
+      const sortAligned = { ...(allSortAligned[libraryId] || {}) };
       let moved = 0;
       let deleted = 0;
+      let metadataAligned = 0;
       let conflictCount = 0;
       let initializedCount = 0;
       let processed = 0;
@@ -613,11 +631,54 @@
         const itemName = localItem?.name || sourceId;
         setOverallProgress(checkedCount, totalTargets);
         setItemProgress(itemName);
-        let remoteState = remoteById.get(sourceId) || { id: sourceId, folders: [], isDeleted: true, version: "missing", modifiedAt: 0 };
-        let localState = localStateForItem(localItem, folderContext);
-        if (localState.missing) {
-          conflicts[sourceId] = { sourceId, localId, detectedAt: Date.now(), reason: "Eagle 未返回该素材，无法确认是删除还是暂时不可用，因此没有传播删除" };
+        let remoteState = remoteById.get(sourceId);
+        if (!remoteState) {
+          conflicts[sourceId] = { sourceId, localId, detectedAt: Date.now(), reason: "Pichome 未返回该素材，也没有明确删除记录，因此没有传播删除" };
           conflictCount += 1;
+          setItemProgress(itemName, 1, 1, true);
+          continue;
+        }
+        let localState = localStateForItem(localItem, folderContext);
+        let confirmedDeletedMissing = false;
+        if (localState.missing) {
+          if (remoteState.isDeleted && (remoteState.tombstone || remoteState.syncEvent?.kind === "delete")) {
+            localState = { missing: false, isDeleted: true, modifiedAt: Number(remoteState.syncEvent?.eventTime || remoteState.modifiedAt || 0), folders: [] };
+            confirmedDeletedMissing = true;
+          } else {
+            conflicts[sourceId] = { sourceId, localId, detectedAt: Date.now(), reason: "Eagle 未返回该素材，无法确认是删除还是暂时不可用，因此没有传播删除" };
+            conflictCount += 1;
+            setItemProgress(itemName, 1, 1, true);
+            continue;
+          }
+        }
+
+        if (localItem && !remoteState.isDeleted && !(remoteState.folders || []).length && folderContext.root && folderContext.unclassified) {
+          const managedFolders = itemFolderIds(localItem).filter((id) => folderContext.managedLocalIds.has(id));
+          if (managedFolders.length === 1 && managedFolders[0] === folderContext.root.id) {
+            const unmanagedFolders = itemFolderIds(localItem).filter((id) => !folderContext.managedLocalIds.has(id));
+            localItem.folders = sortedUnique([...unmanagedFolders, folderContext.unclassified.id]);
+            await localItem.save();
+            moved += 1;
+            localState = localStateForItem(localItem, folderContext);
+          }
+        }
+
+        const sourceImportedAt = Number(remoteState.importedAt || 0);
+        const alignedImportedAt = Number(sortAligned[sourceId] || 0);
+        if (localItem && sourceImportedAt > 0 && metadataAligned < 30 && alignedImportedAt !== sourceImportedAt && alignedImportedAt !== -sourceImportedAt) {
+          try {
+            localItem.importedAt = sourceImportedAt;
+            await localItem.save();
+            sortAligned[sourceId] = sourceImportedAt;
+            metadataAligned += 1;
+            localState = localStateForItem(localItem, folderContext);
+          } catch (_) {
+            sortAligned[sourceId] = -sourceImportedAt;
+          }
+        }
+        if (confirmedDeletedMissing) {
+          baselines[sourceId] = makeBaseline(remoteState, localState);
+          delete conflicts[sourceId];
           setItemProgress(itemName, 1, 1, true);
           continue;
         }
@@ -679,7 +740,7 @@
             }
             if (localItem && !remoteState.isDeleted && !arraysEqual(remoteState.folders, localState.folders)) {
               const localFolders = sortedUnique((remoteState.folders || []).map((id) => folderContext.localByRemote.get(id)).filter(Boolean));
-              if (!localFolders.length && folderContext.root) localFolders.push(folderContext.root.id);
+              if (!localFolders.length && folderContext.unclassified) localFolders.push(folderContext.unclassified.id);
               const unmanagedFolders = itemFolderIds(localItem).filter((id) => !folderContext.managedLocalIds.has(id));
               setResult(elements.syncResult, `双向同步：正在更新 ${localItem.name} 的分类`);
               localItem.folders = sortedUnique([...unmanagedFolders, ...localFolders]);
@@ -713,7 +774,8 @@
 
       syncBaselines[libraryId] = baselines;
       allConflicts[libraryId] = conflicts;
-      saveSettings({ syncBaselines, conflicts: allConflicts });
+      allSortAligned[libraryId] = sortAligned;
+      saveSettings({ syncBaselines, sortAligned: allSortAligned, conflicts: allConflicts });
       const totalConflicts = Object.keys(conflicts).length;
       if (moved || deleted || conflictCount) {
         setResult(elements.syncResult, `双向变更完成：分类移动 ${moved} 项，删除 ${deleted} 项，待处理冲突 ${totalConflicts} 项。`, totalConflicts ? "error" : "success");

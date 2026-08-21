@@ -124,12 +124,13 @@ function json(res, status, data) {
 }
 
 function flattenFolders(folders, parent = null, output = []) {
-  for (const folder of folders || []) {
+  for (const [position, folder] of (folders || []).entries()) {
     output.push({
       id: String(folder.id || ""),
       name: String(folder.name || "未命名文件夹"),
       description: String(folder.description || ""),
-      parent
+      parent,
+      position
     });
     flattenFolders(folder.children, String(folder.id || ""), output);
   }
@@ -389,10 +390,40 @@ async function sendLibraryState(res) {
   try {
     const result = await invokeWriteHelper(["state", LIBRARY_ID]);
     if (!result.ok) throw new Error(result.error || "读取同步状态失败");
+    const current = refreshCache();
+    const presentIds = new Set();
     const items = (result.items || []).map((item) => {
+      presentIds.add(String(item.id));
       const syncEvent = observeRemoteState(item);
-      return { ...item, syncEvent };
+      const cached = current.byId.get(String(item.id));
+      return { ...item, importedAt: Number(cached?.importedAt || 0), syncEvent, tombstone: false };
     });
+    const prefix = `${LIBRARY_ID}:`;
+    for (const [stateKey, stored] of Object.entries(syncStore.items || {})) {
+      if (!stateKey.startsWith(prefix) || !stored?.remoteDeleted) continue;
+      const itemId = stateKey.slice(prefix.length);
+      if (!itemId || presentIds.has(itemId)) continue;
+      let folders = [];
+      try { folders = JSON.parse(stored.remoteFolders || "[]"); } catch (_) {}
+      const syncEvent = stored.lastEvent || {
+        seq: 0,
+        side: "pichome",
+        kind: "delete",
+        eventTime: Number(stored.remoteModifiedAt) || 0,
+        serverTime: Number(stored.remoteModifiedAt) || 0,
+        clientId: null
+      };
+      items.push({
+        id: itemId,
+        folders,
+        isDeleted: true,
+        modifiedAt: Number(stored.remoteModifiedAt) || 0,
+        importedAt: 0,
+        version: String(stored.remoteVersion || `tombstone:${syncEvent.seq || 0}`),
+        syncEvent,
+        tombstone: true
+      });
+    }
     persistSyncStore();
     return json(res, 200, { items, generatedAt: Date.now() });
   } catch (error) {
@@ -464,13 +495,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         service: "Pichome Sync Bridge",
-        version: "0.5.1",
+        version: "0.5.2",
         message: "Tailscale connection is working. Use the Eagle plugin to synchronize.",
         library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length }
       });
     }
     if (url.pathname === "/api/v1/health") {
-      return json(res, 200, { ok: true, service: "pichome-eagle-sync", version: "0.5.1", capabilities: { download: true, upload: true, delete: true, folderSync: true, conflictProtection: true, operationLog: true, latestOperationWins: true }, library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length } });
+      return json(res, 200, { ok: true, service: "pichome-eagle-sync", version: "0.5.2", capabilities: { download: true, upload: true, delete: true, folderSync: true, unclassifiedMapping: true, folderOrderMetadata: true, conflictProtection: true, operationLog: true, latestOperationWins: true }, library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length } });
     }
     if (url.pathname === "/api/v1/libraries") {
       return json(res, 200, { libraries: [{ id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length, folderCount: current.folders.length, version: current.fingerprint }] });
