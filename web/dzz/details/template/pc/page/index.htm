@@ -349,10 +349,22 @@
 				event.stopPropagation();
 				return true;
 			},
+			FramePreviewHideCenterControl(rootDocument){
+				try{
+					if(!rootDocument || !rootDocument.documentElement) return;
+					const styleId = 'pichome-hide-video-center-control';
+					if(rootDocument.getElementById(styleId)) return;
+					const style = rootDocument.createElement('style');
+					style.id = styleId;
+					style.textContent = '.xgplayer-skin-default .xgplayer-start{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}';
+					(rootDocument.head || rootDocument.documentElement).appendChild(style);
+				}catch(error){}
+			},
 			FramePreviewInstallKeyboard(rootDocument){
 				const self = this;
 				const root = rootDocument || document;
 				try{
+					self.FramePreviewHideCenterControl(root);
 					root.querySelectorAll('iframe').forEach(function(frame){
 						const attach = function(){
 							try{
