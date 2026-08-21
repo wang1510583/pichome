@@ -130,7 +130,9 @@ if ($operation === 'reconcile') {
         if (!$state) continue;
         $metadatafile = rtrim($appdata['path'], '/\\') . DIRECTORY_SEPARATOR . 'images' . DIRECTORY_SEPARATOR . $sourceId . '.info' . DIRECTORY_SEPARATOR . 'metadata.json';
         if (!is_file($metadatafile) || !is_writable($metadatafile)) continue;
-        $lock = @fopen($metadatafile . '.lock', 'c+');
+        $lockfile = $metadatafile . '.lock';
+        $lock = @fopen($lockfile, 'c+');
+        if ($lock) @chmod($lockfile, 0664);
         if (!$lock || !flock($lock, LOCK_EX)) { if ($lock) fclose($lock); continue; }
         $metadata = json_decode(file_get_contents($metadatafile), true);
         if (!is_array($metadata)) { flock($lock, LOCK_UN); fclose($lock); continue; }
@@ -156,7 +158,9 @@ if ($operation === 'reconcile') {
     }
     if ($changed) {
         $mtimefile = rtrim($appdata['path'], '/\\') . DIRECTORY_SEPARATOR . 'mtime.json';
-        $mtimelock = @fopen($mtimefile . '.lock', 'c+');
+        $mtimelockfile = $mtimefile . '.lock';
+        $mtimelock = @fopen($mtimelockfile, 'c+');
+        if ($mtimelock) @chmod($mtimelockfile, 0664);
         if ($mtimelock && flock($mtimelock, LOCK_EX)) {
             $mtimedata = is_file($mtimefile) ? json_decode(file_get_contents($mtimefile), true) : array();
             if (!is_array($mtimedata)) $mtimedata = array();
@@ -194,7 +198,9 @@ if ($operation === 'mutate') {
     if (!is_file($metadatafile) || !is_writable($metadatafile)) {
         finish_json(array('ok' => false, 'error' => 'Eagle metadata.json 不可写'), 4);
     }
-    $lock = @fopen($metadatafile . '.lock', 'c+');
+    $lockfile = $metadatafile . '.lock';
+    $lock = @fopen($lockfile, 'c+');
+    if ($lock) @chmod($lockfile, 0664);
     if (!$lock || !flock($lock, LOCK_EX)) finish_json(array('ok' => false, 'error' => '无法锁定素材信息'), 4);
     $metadata = json_decode(file_get_contents($metadatafile), true);
     if (!is_array($metadata)) {
@@ -252,7 +258,9 @@ if ($operation === 'mutate') {
     ), array('rid' => $state['rid']));
 
     $mtimefile = rtrim($appdata['path'], '/\\') . DIRECTORY_SEPARATOR . 'mtime.json';
-    $mtimelock = @fopen($mtimefile . '.lock', 'c+');
+    $mtimelockfile = $mtimefile . '.lock';
+    $mtimelock = @fopen($mtimelockfile, 'c+');
+    if ($mtimelock) @chmod($mtimelockfile, 0664);
     if ($mtimelock && flock($mtimelock, LOCK_EX)) {
         $mtimedata = is_file($mtimefile) ? json_decode(file_get_contents($mtimefile), true) : array();
         if (!is_array($mtimedata)) $mtimedata = array();

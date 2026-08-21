@@ -41,7 +41,9 @@ function pichome_mark_eagle_deleted($rids)
             return array('success' => false, 'msg' => 'Eagle metadata.json 不可写');
         }
 
-        $lock = @fopen($metadatafile . '.lock', 'c+');
+        $lockfile = $metadatafile . '.lock';
+        $lock = @fopen($lockfile, 'c+');
+        if ($lock) @chmod($lockfile, 0664);
         if (!$lock || !flock($lock, LOCK_EX)) {
             if ($lock) fclose($lock);
             return array('success' => false, 'msg' => '无法锁定 Eagle 素材信息');
@@ -68,7 +70,9 @@ function pichome_mark_eagle_deleted($rids)
 
         // Notify Eagle and the next Pichome scan that this item changed.
         $mtimefile = $library . DIRECTORY_SEPARATOR . 'mtime.json';
-        $mtimelock = @fopen($mtimefile . '.lock', 'c+');
+        $mtimelockfile = $mtimefile . '.lock';
+        $mtimelock = @fopen($mtimelockfile, 'c+');
+        if ($mtimelock) @chmod($mtimelockfile, 0664);
         if ($mtimelock && flock($mtimelock, LOCK_EX)) {
             $mtimedata = is_file($mtimefile) ? json_decode(file_get_contents($mtimefile), true) : array();
             if (!is_array($mtimedata)) $mtimedata = array();

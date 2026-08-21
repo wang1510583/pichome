@@ -321,7 +321,9 @@ class io_dzz extends io_api
             @chmod($metadatafile, 0664);
 
             $mtimefile = $library . DIRECTORY_SEPARATOR . 'mtime.json';
-            $lock = @fopen($mtimefile . '.lock', 'c+');
+            $lockfile = $mtimefile . '.lock';
+            $lock = @fopen($lockfile, 'c+');
+            if ($lock) @chmod($lockfile, 0664);
             if (!$lock || !flock($lock, LOCK_EX)) throw new Exception('无法锁定 Eagle mtime.json');
             $mtimedata = array();
             if (is_file($mtimefile)) {

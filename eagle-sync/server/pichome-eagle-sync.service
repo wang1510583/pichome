@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=wangjiafeng
 Group=www-data
+UMask=0002
 Environment=NODE_ENV=production
 Environment=SYNC_HOST=127.0.0.1
 Environment=SYNC_PORT=43127
