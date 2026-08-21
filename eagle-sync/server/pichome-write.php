@@ -21,6 +21,17 @@ define('PICHOME_SYNC_CLI_ARGS', $argv);
 
 require '/var/www/filepress/core/coreBase.php';
 
+$GLOBALS['pichome_sync_finished'] = false;
+register_shutdown_function(function () {
+    if (!empty($GLOBALS['pichome_sync_finished'])) return;
+    $error = error_get_last();
+    if (!$error || !in_array($error['type'], array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR), true)) return;
+    echo json_encode(array(
+        'ok' => false,
+        'error' => 'PHP 致命错误：' . $error['message'] . ' (' . basename($error['file']) . ':' . $error['line'] . ')'
+    ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), "\n";
+});
+
 $dzz = C::app();
 $dzz->init_user = true;
 $dzz->init_setting = true;
@@ -30,6 +41,7 @@ $dzz->init_misc = true;
 $dzz->init();
 
 function finish_json($payload, $status = 0) {
+    $GLOBALS['pichome_sync_finished'] = true;
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), "\n";
     exit($status);
 }
@@ -285,7 +297,11 @@ foreach (glob($imagesdir . DIRECTORY_SEPARATOR . '*.info', GLOB_ONLYDIR) ?: arra
     $before[basename($dir, '.info')] = true;
 }
 
-$result = IO::uploadStream($file, $filename, $appid, $pfid, '', array());
+try {
+    $result = IO::uploadStream($file, $filename, $appid, $pfid, '', array());
+} catch (Throwable $error) {
+    finish_json(array('ok' => false, 'error' => 'Pichome 写入异常：' . $error->getMessage()), 4);
+}
 if (!$result || !empty($result['error'])) {
     finish_json(array('ok' => false, 'error' => !empty($result['error']) ? $result['error'] : 'Pichome 写入失败'), 4);
 }

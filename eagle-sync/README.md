@@ -51,4 +51,4 @@
 - systemd 服务：`pichome-eagle-sync.service`
 - 本地监听：`127.0.0.1:43127`
 - Tailscale Serve：`https://wang.tail26a65a.ts.net:8452/`
-- API 版本：0.7.2（下载、兼容 Eagle 旧版 Node 的上传、Pichome 索引权威强制镜像、近实时事件通知、分类更新、未分类映射、软删除 tombstone、操作日志和最新操作判定）
+- API 版本：0.7.3（下载、先入库后关联分类的可靠上传、兼容 Eagle 旧版 Node、Pichome 索引权威强制镜像、近实时事件通知、分类更新、未分类映射、软删除 tombstone、操作日志和最新操作判定）

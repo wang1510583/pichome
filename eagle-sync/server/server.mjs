@@ -385,13 +385,25 @@ async function receiveUpload(req, res) {
     if (!received) throw new Error("上传内容为空");
 
     const operation = async () => {
-      const { stdout } = await execFileAsync("/usr/bin/php", [WRITE_HELPER, "upload", LIBRARY_ID, tempPath, metadata.filename, metadata.folderId], {
-        timeout: 30 * 60 * 1000,
-        maxBuffer: 1024 * 1024
-      });
-      const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
-      const result = JSON.parse(lines.at(-1) || "{}");
+      // Pichome's Eagle importer can fail while creating the initial folder
+      // relation. Create the item unclassified first, then use our tested
+      // mutation path to attach the requested folder exactly once.
+      const result = await invokeWriteHelper(["upload", LIBRARY_ID, tempPath, metadata.filename, ""]);
       if (!result.ok || !result.sourceId) throw new Error(result.error || "Pichome 未返回素材 ID");
+      if (metadata.folderId) {
+        const stateResult = await invokeWriteHelper(["state", LIBRARY_ID]);
+        const createdState = (stateResult.items || []).find((item) => String(item.id) === String(result.sourceId));
+        if (!createdState) throw new Error("素材已写入，但无法读取新素材状态");
+        const mutationPayload = Buffer.from(JSON.stringify({
+          baseVersion: createdState.version,
+          folders: [metadata.folderId],
+          isDeleted: false,
+          clientTime: Date.now(),
+          clientId: "eagle-upload"
+        }), "utf8").toString("base64url");
+        const mutationResult = await invokeWriteHelper(["mutate", LIBRARY_ID, result.sourceId, mutationPayload]);
+        if (!mutationResult.ok) throw new Error(mutationResult.error || "新素材分类关联失败");
+      }
       const current = refreshCache(true);
       const item = current.byId.get(result.sourceId);
       if (!item) throw new Error("素材已写入，但同步索引尚未就绪");
@@ -423,9 +435,12 @@ async function invokeWriteHelper(args) {
     });
     return parseHelperOutput(stdout);
   } catch (error) {
-    const result = parseHelperOutput(error.stdout || "");
-    if (result.conflict) return result;
-    throw new Error(result.error || error.message || "Pichome 写入失败");
+    let result = null;
+    try { result = parseHelperOutput(error.stdout || ""); } catch (_) {}
+    if (result?.conflict) return result;
+    const stderr = String(error.stderr || "").trim();
+    const stdout = String(error.stdout || "").trim();
+    throw new Error(result?.error || stderr || stdout || error.message || "Pichome 写入失败");
   }
 }
 
@@ -569,13 +584,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         service: "Pichome Sync Bridge",
-        version: "0.7.2",
+        version: "0.7.3",
         message: "Tailscale connection is working. Use the Eagle plugin to synchronize.",
         library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length }
       });
     }
     if (url.pathname === "/api/v1/health") {
-      return json(res, 200, { ok: true, service: "pichome-eagle-sync", version: "0.7.2", capabilities: { download: true, upload: true, delete: true, folderSync: true, unclassifiedMapping: true, folderOrderMetadata: true, realtimeEvents: true, forceMirror: true, pichomeIndexAuthority: true, sourceReconcile: true, conflictProtection: true, operationLog: true, latestOperationWins: true }, library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length } });
+      return json(res, 200, { ok: true, service: "pichome-eagle-sync", version: "0.7.3", capabilities: { download: true, upload: true, delete: true, folderSync: true, unclassifiedMapping: true, folderOrderMetadata: true, realtimeEvents: true, forceMirror: true, pichomeIndexAuthority: true, sourceReconcile: true, conflictProtection: true, operationLog: true, latestOperationWins: true }, library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length } });
     }
     if (url.pathname === "/api/v1/libraries") {
       return json(res, 200, { libraries: [{ id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length, folderCount: current.folders.length, version: current.fingerprint }] });
