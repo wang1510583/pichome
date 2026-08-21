@@ -148,6 +148,7 @@
 						if(!dasta.iniframe){
 							self.imageSet();
 						}
+						self.FramePreviewInstallKeyboard();
 					});
 				},
 				deep:true,
@@ -231,6 +232,147 @@
 		
 		
 		methods: {
+			FramePreviewEditableTarget(target){
+				if(!target || !target.closest) return false;
+				return !!target.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]');
+			},
+			FramePreviewFindVideo(rootDocument){
+				try{
+					if(!rootDocument || !rootDocument.querySelectorAll) return null;
+					const videos = rootDocument.querySelectorAll('video');
+					let fallback = videos.length ? videos[0] : null;
+					for(let index = 0; index < videos.length; index++){
+						if(videos[index].readyState >= 1) return videos[index];
+					}
+					const frames = rootDocument.querySelectorAll('iframe');
+					for(let index = 0; index < frames.length; index++){
+						const nested = this.FramePreviewFindVideo(frames[index].contentDocument);
+						if(nested) return nested;
+					}
+					return fallback;
+				}catch(error){
+					return null;
+				}
+			},
+			FramePreviewParseRate(value){
+				if(value === undefined || value === null) return 0;
+				const parts = String(value).split('/');
+				const rate = parts.length === 2 ? parseFloat(parts[0]) / parseFloat(parts[1]) : parseFloat(parts[0]);
+				return isFinite(rate) && rate >= 1 && rate <= 240 ? rate : 0;
+			},
+			FramePreviewRate(video){
+				const measured = parseFloat(video.dataset.pichomeFrameDuration);
+				if(isFinite(measured) && measured >= 1/240 && measured <= 1) return 1/measured;
+				let rate = this.FramePreviewParseRate(video.getAttribute('data-fps') || video.dataset.fps || video.dataset.frameRate);
+				if(rate) return rate;
+				rate = this.FramePreviewParseRate(this.imagesData && (this.imagesData.fps || this.imagesData.frame_rate || this.imagesData.framerate));
+				return rate || 30;
+			},
+			FramePreviewClampTime(video,target){
+				if(isFinite(video.duration)) target = Math.min(video.duration, target);
+				target = Math.max(0, target);
+				try{
+					for(let index = 0; index < video.seekable.length; index++){
+						const start = video.seekable.start(index);
+						const end = video.seekable.end(index);
+						if(video.currentTime >= start-.05 && video.currentTime <= end+.05){
+							return Math.max(start, Math.min(end, target));
+						}
+					}
+				}catch(error){}
+				return target;
+			},
+			FramePreviewSeek(video,direction){
+				const step = 1 / this.FramePreviewRate(video);
+				let base = parseFloat(video.dataset.pichomeFrameTarget);
+				if(!isFinite(base) || Math.abs(base-video.currentTime) > Math.max(.5,step*4)) base = video.currentTime;
+				const target = this.FramePreviewClampTime(video, base + direction*step);
+				video.dataset.pichomeFrameTarget = String(target);
+				video.currentTime = target;
+			},
+			FramePreviewStep(direction,rootDocument){
+				const video = this.FramePreviewFindVideo(rootDocument || document);
+				if(!video || video.readyState < 1) return false;
+				if(video.dataset.pichomeFrameAdvancing === '1') return true;
+				try{
+					video.pause();
+					if(direction > 0 && typeof video.requestVideoFrameCallback === 'function'){
+						const self = this;
+						const token = String((parseInt(video.dataset.pichomeFrameToken) || 0) + 1);
+						const muted = video.muted;
+						video.dataset.pichomeFrameToken = token;
+						video.dataset.pichomeFrameAdvancing = '1';
+						video.muted = true;
+						let completed = false;
+						const finish = function(metadata){
+							if(completed || video.dataset.pichomeFrameToken !== token) return;
+							completed = true;
+							video.pause();
+							video.muted = muted;
+							delete video.dataset.pichomeFrameAdvancing;
+							if(metadata && isFinite(metadata.mediaTime)){
+								const previous = parseFloat(video.dataset.pichomeFrameTarget);
+								if(isFinite(previous)){
+									const duration = metadata.mediaTime-previous;
+									if(duration >= 1/240 && duration <= 1) video.dataset.pichomeFrameDuration = String(duration);
+								}
+								video.dataset.pichomeFrameTarget = String(metadata.mediaTime);
+							}
+						};
+						video.requestVideoFrameCallback(function(now,metadata){ finish(metadata); });
+						const promise = video.play();
+						if(promise && promise.catch) promise.catch(function(){
+							finish(null);
+							self.FramePreviewSeek(video,1);
+						});
+						setTimeout(function(){
+							if(completed || video.dataset.pichomeFrameToken !== token) return;
+							finish(null);
+							self.FramePreviewSeek(video,1);
+						},1000);
+					}else{
+						this.FramePreviewSeek(video,direction);
+					}
+					return true;
+				}catch(error){
+					delete video.dataset.pichomeFrameAdvancing;
+					return false;
+				}
+			},
+			FramePreviewHandleKeydown(event,rootDocument){
+				if(event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return false;
+				if(event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return false;
+				if(this.FramePreviewEditableTarget(event.target)) return false;
+				const direction = event.key === 'ArrowUp' ? -1 : 1;
+				if(!this.FramePreviewStep(direction,rootDocument)) return false;
+				event.preventDefault();
+				event.stopPropagation();
+				return true;
+			},
+			FramePreviewInstallKeyboard(rootDocument){
+				const self = this;
+				const root = rootDocument || document;
+				try{
+					root.querySelectorAll('iframe').forEach(function(frame){
+						const attach = function(){
+							try{
+								const frameDocument = frame.contentDocument;
+								if(!frameDocument) return;
+								if(!frameDocument.__pichomeFrameKeyboard){
+									frameDocument.__pichomeFrameKeyboard = true;
+									frameDocument.addEventListener('keydown',function(event){ self.FramePreviewHandleKeydown(event,frameDocument); },true);
+								}
+								self.FramePreviewInstallKeyboard(frameDocument);
+							}catch(error){}
+						};
+						if(!frame.dataset.pichomeFrameKeyboard){
+							frame.dataset.pichomeFrameKeyboard = '1';
+							frame.addEventListener('load',attach);
+						}
+						attach();
+					});
+				}catch(error){}
+			},
 			DocumentThemeChange(){
 				if(this.DocumentThemeColor=='light'){
 					this.DocumentThemeColor='dark';
@@ -398,6 +540,7 @@
 				this.HideInformation = true;
 			}
 			window.onkeydown = function(event){ //event可以简写成 e
+				if(self.FramePreviewHandleKeydown(event,document)) return;
 				var code = event.keyCode
 				if(code == 37){//左边
 					self.headerCarouselArrow('left')
@@ -405,6 +548,10 @@
 					self.headerCarouselArrow('right')
 				}
 			}
+			self.FramePreviewInstallKeyboard();
+			[100,300,800,1600].forEach(function(delay){
+				setTimeout(function(){ self.FramePreviewInstallKeyboard(); },delay);
+			});
 
 			// $(document).on('click', '.copy-share-btn', function() {
 			// 	var txt = $(this).parent().siblings('.address').text()
