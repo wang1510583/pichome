@@ -498,6 +498,36 @@
 					catch(error){ resolve(''); }
 				});
 			},
+			ImageDropNormalizeFile(file) {
+				if(!file || !file.size) return null;
+				const name = String(file.name || '').trim();
+				if(/\.[a-z0-9]{1,8}$/i.test(name)) return file;
+				const extensions = {
+					'image/jpeg':'jpg',
+					'image/png':'png',
+					'image/gif':'gif',
+					'image/webp':'webp',
+					'image/bmp':'bmp',
+					'image/x-ms-bmp':'bmp',
+					'image/svg+xml':'svg'
+				};
+				const extension = extensions[String(file.type || '').toLowerCase()];
+				if(!extension) return null;
+				const basename = name.replace(/[. ]+$/, '') || ('online-image-'+Date.now());
+				try{
+					return new File([file], basename+'.'+extension, {
+						type:file.type,
+						lastModified:file.lastModified || Date.now()
+					});
+				}catch(error){
+					try{
+						Object.defineProperty(file, 'name', {value:basename+'.'+extension});
+						return file;
+					}catch(ignore){
+						return null;
+					}
+				}
+			},
 			async ImageDropExtractRemoteUrls(dataTransfer) {
 				const htmlValues = [];
 				const textValues = [];
@@ -542,6 +572,7 @@
 			},
 			async ImageUploadRemoteUrls(urls) {
 				if(!urls.length) return;
+				const self = this;
 				let fid = this.UploadCurrentFolderId();
 				if(fid === 'root' || fid === '0') fid = '';
 				let succeeded = 0;
@@ -561,7 +592,7 @@
 					}
 				}
 				if(succeeded){
-					if(this.$refs.RefImageLayout) this.$refs.RefImageLayout.restart();
+					if(self.$refs.RefImageLayout) self.$refs.RefImageLayout.restart();
 					this.CommonGetImageData();
 					if(this.LeftTreeForceRefreshNum) this.LeftTreeForceRefreshNum();
 					else this.LeftTreeGetFolderNum();
@@ -590,8 +621,8 @@
 								this.UploadFileChange(files,'drop');
 							});
 						}else{
-							const file = element.getAsFile();
-							if(file && file.size > 0){
+							const file = this.ImageDropNormalizeFile(element.getAsFile());
+							if(file){
 								localFileCount += 1;
 								this.UploadChange([file],'drop');
 							}
