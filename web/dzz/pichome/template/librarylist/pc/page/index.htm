@@ -491,6 +491,85 @@
 					this.RightGetData();
 				}
 			},
+			ImageDropReadString(item) {
+				return new Promise(resolve => {
+					if(!item || typeof item.getAsString !== 'function') return resolve('');
+					try{ item.getAsString(value => resolve(value || '')); }
+					catch(error){ resolve(''); }
+				});
+			},
+			async ImageDropExtractRemoteUrls(dataTransfer) {
+				const htmlValues = [];
+				const textValues = [];
+				if(!dataTransfer) return [];
+				try{
+					const html = dataTransfer.getData('text/html');
+					const uri = dataTransfer.getData('text/uri-list');
+					const text = dataTransfer.getData('text/plain');
+					if(html) htmlValues.push(html);
+					if(uri) textValues.push(uri);
+					if(text) textValues.push(text);
+				}catch(error){}
+				if(dataTransfer.items && dataTransfer.items.length){
+					for(let index = 0; index < dataTransfer.items.length; index++){
+						const item = dataTransfer.items[index];
+						if(item.kind !== 'string') continue;
+						const value = await this.ImageDropReadString(item);
+						if(!value) continue;
+						if(item.type === 'text/html') htmlValues.push(value);
+						else textValues.push(value);
+					}
+				}
+				const imageUrls = [];
+				for(const html of htmlValues){
+					try{
+						const documentNode = new DOMParser().parseFromString(html, 'text/html');
+						documentNode.querySelectorAll('img[src]').forEach(image => imageUrls.push(image.getAttribute('src')));
+					}catch(error){}
+				}
+				const fallbackUrls = [];
+				for(const value of textValues){
+					String(value).split(/\r?\n/).forEach(line => {
+						line = line.trim();
+						if(line && line.charAt(0) !== '#'){
+							const matches = line.match(/https?:\/\/[^\s"'<>]+/ig) || [];
+							fallbackUrls.push(...matches);
+						}
+					});
+				}
+				const candidates = imageUrls.length ? imageUrls : fallbackUrls;
+				return [...new Set(candidates.map(url => String(url).replace(/&amp;/g, '&').replace(/[),.;]+$/, '')).filter(url => /^https?:\/\//i.test(url)))].slice(0, 20);
+			},
+			async ImageUploadRemoteUrls(urls) {
+				if(!urls.length) return;
+				let fid = this.UploadCurrentFolderId();
+				if(fid === 'root' || fid === '0') fid = '';
+				let succeeded = 0;
+				const errors = [];
+				this.$message({type:'info', message:'正在下载 '+urls.length+' 张在线图片…'});
+				for(const url of urls){
+					try{
+						const {data: response} = await axios.post(MOD_URL+'&op=library&do=upload&operation=remoteupload', {
+							url:url,
+							appid:this.DocumentAppid,
+							pfid:fid
+						});
+						if(response && response.success) succeeded += 1;
+						else errors.push((response && (response.msg || response.message)) || '下载失败');
+					}catch(error){
+						errors.push((error.response && error.response.data && error.response.data.msg) || error.message || '下载失败');
+					}
+				}
+				if(succeeded){
+					if(this.$refs.RefImageLayout) this.$refs.RefImageLayout.restart();
+					this.CommonGetImageData();
+					if(this.LeftTreeForceRefreshNum) this.LeftTreeForceRefreshNum();
+					else this.LeftTreeGetFolderNum();
+					if(this.LeftGetAllNum) this.LeftGetAllNum();
+				}
+				if(errors.length) this.$message({type:'warning', message:'在线图片添加 '+succeeded+' 张，失败 '+errors.length+' 张：'+errors[0]});
+				else this.$message({type:'success', message:'已添加 '+succeeded+' 张在线图片'});
+			},
 			async ImageUploadDropEvent(e) {
 				const self = this;
 				if(this.LeftCurrenType == 'recycle' || ![0,3].includes(parseInt(this.DocumentVapp.type))){
@@ -499,22 +578,30 @@
 				e.preventDefault();
 				const dataTransfer = e.dataTransfer;
 
+				let localFileCount = 0;
 				if(dataTransfer.items && dataTransfer.items.length){
-					
 					for (let index = 0; index < dataTransfer.items.length; index++) {
 						const element = dataTransfer.items[index];
-						const folder = element.webkitGetAsEntry();
+						if(element.kind && element.kind !== 'file') continue;
+						const folder = typeof element.webkitGetAsEntry === 'function' ? element.webkitGetAsEntry() : null;
 						if (folder && folder.isDirectory) {
+							localFileCount += 1;
 							readFolder(folder).then(files=>{
 								this.UploadFileChange(files,'drop');
 							});
 						}else{
-							if(element.getAsFile()){
-								this.UploadChange([element.getAsFile()],'drop');
+							const file = element.getAsFile();
+							if(file && file.size > 0){
+								localFileCount += 1;
+								this.UploadChange([file],'drop');
 							}
-							
 						}
 					}
+				}
+				if(!localFileCount){
+					const remoteUrls = await this.ImageDropExtractRemoteUrls(dataTransfer);
+					if(remoteUrls.length) await this.ImageUploadRemoteUrls(remoteUrls);
+					else this.$message({type:'warning', message:'没有识别到可上传的本地文件或在线图片地址'});
 				}
 			
 				this.DocumentDropActive = false;
