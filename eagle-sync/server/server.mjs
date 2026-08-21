@@ -24,6 +24,61 @@ const ALLOWED_UPLOAD_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", 
 
 let cache = { fingerprint: "", items: [], byId: new Map(), folders: [] };
 let uploadQueue = Promise.resolve();
+const eventClients = new Set();
+let changeRevision = Date.now();
+let changeBroadcastTimer = null;
+let fallbackFingerprint = "";
+
+function broadcastLibraryChange(reason = "library-change") {
+  clearTimeout(changeBroadcastTimer);
+  changeBroadcastTimer = setTimeout(() => {
+    try { fallbackFingerprint = fingerprint(); } catch (_) {}
+    changeRevision = Date.now();
+    const message = `event: change\nid: ${changeRevision}\ndata: ${JSON.stringify({ libraryId: LIBRARY_ID, revision: changeRevision, reason })}\n\n`;
+    for (const client of [...eventClients]) {
+      try { client.write(message); } catch (_) { eventClients.delete(client); }
+    }
+  }, 700);
+}
+
+function sendEventStream(req, res) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+    "X-Accel-Buffering": "no"
+  });
+  res.write(`event: ready\ndata: ${JSON.stringify({ libraryId: LIBRARY_ID, revision: changeRevision })}\n\n`);
+  eventClients.add(res);
+  const heartbeat = setInterval(() => {
+    try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch (_) {}
+  }, 25000);
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    eventClients.delete(res);
+  });
+}
+
+function startLibraryWatchers() {
+  const watchTargets = [LIBRARY_METADATA_PATH, LIBRARY_MTIME_PATH, IMAGES_PATH];
+  for (const target of watchTargets) {
+    try {
+      const watcher = fs.watch(target, { persistent: false }, () => broadcastLibraryChange(path.basename(target)));
+      watcher.on("error", (error) => console.warn(JSON.stringify({ event: "watch-error", target, error: error.message })));
+    } catch (error) {
+      console.warn(JSON.stringify({ event: "watch-unavailable", target, error: error.message }));
+    }
+  }
+  try { fallbackFingerprint = fingerprint(); } catch (_) {}
+  setInterval(() => {
+    try {
+      const next = fingerprint();
+      if (fallbackFingerprint && next !== fallbackFingerprint) broadcastLibraryChange("fingerprint-fallback");
+      fallbackFingerprint = next;
+    } catch (_) {}
+  }, 2000).unref();
+}
 
 fs.mkdirSync(path.dirname(STATE_FILE_PATH), { recursive: true });
 function loadSyncStore() {
@@ -488,6 +543,7 @@ const server = http.createServer(async (req, res) => {
   const mutationMatch = new RegExp(`^/api/v1/libraries/${LIBRARY_ID}/items/([A-Za-z0-9_-]+)$`).exec(url.pathname);
   if (req.method === "PATCH" && mutationMatch) return mutateItem(req, res, mutationMatch[1]);
   if (req.method !== "GET") return json(res, 405, { error: "method_not_allowed" });
+  if (url.pathname === "/api/v1/events") return sendEventStream(req, res);
 
   try {
     const current = refreshCache();
@@ -495,13 +551,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         service: "Pichome Sync Bridge",
-        version: "0.5.2",
+        version: "0.6.0",
         message: "Tailscale connection is working. Use the Eagle plugin to synchronize.",
         library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length }
       });
     }
     if (url.pathname === "/api/v1/health") {
-      return json(res, 200, { ok: true, service: "pichome-eagle-sync", version: "0.5.2", capabilities: { download: true, upload: true, delete: true, folderSync: true, unclassifiedMapping: true, folderOrderMetadata: true, conflictProtection: true, operationLog: true, latestOperationWins: true }, library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length } });
+      return json(res, 200, { ok: true, service: "pichome-eagle-sync", version: "0.6.0", capabilities: { download: true, upload: true, delete: true, folderSync: true, unclassifiedMapping: true, folderOrderMetadata: true, realtimeEvents: true, conflictProtection: true, operationLog: true, latestOperationWins: true }, library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length } });
     }
     if (url.pathname === "/api/v1/libraries") {
       return json(res, 200, { libraries: [{ id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length, folderCount: current.folders.length, version: current.fingerprint }] });
@@ -537,5 +593,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   const current = refreshCache(true);
+  startLibraryWatchers();
   console.log(JSON.stringify({ event: "server-started", host: HOST, port: PORT, library: LIBRARY_NAME, items: current.items.length }));
 });

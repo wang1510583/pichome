@@ -5,7 +5,7 @@
   const V3_SETTINGS_KEY = "pichome-sync-settings-v3";
   const V2_SETTINGS_KEY = "pichome-sync-settings-v2";
   const DEFAULT_SERVER = "https://wang.tail26a65a.ts.net:8452/";
-  const AUTO_INTERVAL_MS = 60 * 1000;
+  const AUTO_INTERVAL_MS = 2 * 60 * 60 * 1000;
   const PAGE_SIZE = 25;
   const CONFLICT_WINDOW_MS = 10 * 1000;
   const CLIENT_ID_KEY = "pichome-sync-client-id";
@@ -14,6 +14,9 @@
   let syncRunning = false;
   let initialized = false;
   let autoTimer = null;
+  let eventStream = null;
+  let triggerTimer = null;
+  let localWatchers = [];
 
   function defaultSettings() {
     return {
@@ -126,15 +129,15 @@
     elements.statusHint.textContent = !settings.enabled
       ? "同步已暂停；设置和进度会保留。"
       : settings.autoMode === "two-way"
-        ? "每分钟同步新增、分类移动和可恢复删除；冲突会暂停处理。"
+        ? "检测到操作后约 2 秒同步新增、分类移动和可恢复删除；每 2 小时兜底巡检。"
         : settings.autoMode === "one-way"
-          ? "每分钟自动检查 Pichome，并导入新增素材。"
+          ? "Pichome 发生变化后约 2 秒自动导入；每 2 小时兜底巡检。"
           : "可按自定义数量手动导入，不会回写 Pichome。";
     elements.modeHint.textContent = settings.autoMode === "off"
       ? "未开启自动同步"
       : settings.autoMode === "one-way"
-        ? "Pichome → Eagle，首次连续追平，之后每 1 分钟巡检"
-        : "Pichome ↔ Eagle，首次连续追平，之后每 1 分钟巡检全部变更";
+        ? "Pichome → Eagle，变化后约 2 秒同步，每 2 小时兜底"
+        : "Pichome ↔ Eagle，变化后约 2 秒同步，每 2 小时兜底";
     updateSyncButton();
   }
 
@@ -143,6 +146,64 @@
     elements.syncButton.disabled = syncRunning || !elements.librarySelect.value || !window.eagle;
     elements.oneWayButton.disabled = syncRunning;
     elements.twoWayButton.disabled = syncRunning;
+  }
+
+  function closeReactiveSync() {
+    if (eventStream) eventStream.close();
+    eventStream = null;
+    for (const watcher of localWatchers) {
+      try { watcher.close(); } catch (_) {}
+    }
+    localWatchers = [];
+  }
+
+  function scheduleTriggeredSync(side = "remote") {
+    const settings = readSettings();
+    if (!settings.enabled || settings.autoMode === "off") return;
+    if (side === "local" && settings.autoMode !== "two-way") return;
+    clearTimeout(triggerTimer);
+    triggerTimer = setTimeout(() => {
+      if (syncRunning) return scheduleTriggeredSync(side);
+      runAutoCycle();
+    }, 1800);
+  }
+
+  function connectRemoteEvents() {
+    if (eventStream) eventStream.close();
+    eventStream = null;
+    const settings = readSettings();
+    if (!settings.enabled || settings.autoMode === "off" || typeof EventSource !== "function") return;
+    try {
+      eventStream = new EventSource(new URL("api/v1/events", normalizedServer()).href);
+      eventStream.addEventListener("change", () => scheduleTriggeredSync("remote"));
+    } catch (_) {}
+  }
+
+  async function watchLocalLibrary() {
+    for (const watcher of localWatchers) {
+      try { watcher.close(); } catch (_) {}
+    }
+    localWatchers = [];
+    const settings = readSettings();
+    if (!window.eagle || !settings.enabled || settings.autoMode === "off") return;
+    try {
+      const info = await eagle.library.info();
+      const libraryPath = info?.path || eagle.library.path;
+      if (!libraryPath) return;
+      const fs = require("fs");
+      const path = require("path");
+      for (const target of [path.join(libraryPath, "metadata.json"), path.join(libraryPath, "mtime.json"), path.join(libraryPath, "images")]) {
+        if (!fs.existsSync(target)) continue;
+        const watcher = fs.watch(target, { persistent: false }, () => scheduleTriggeredSync("local"));
+        watcher.on("error", () => {});
+        localWatchers.push(watcher);
+      }
+    } catch (_) {}
+  }
+
+  function refreshReactiveSync() {
+    connectRemoteEvents();
+    watchLocalLibrary();
   }
 
   async function detectEagle() {
@@ -162,6 +223,7 @@
       elements.libraryName.textContent = info?.name || eagle.library.name || "已识别";
       elements.libraryPath.textContent = info?.path || eagle.library.path || "已识别";
       elements.libraryPath.title = elements.libraryPath.textContent;
+      watchLocalLibrary();
     } catch (_) {
       elements.libraryName.textContent = eagle.library.name || "读取失败";
       elements.libraryPath.textContent = eagle.library.path || "读取失败";
@@ -200,6 +262,7 @@
       elements.remoteCount.textContent = remoteLibraries.length ? `${health.library.itemCount} 项素材` : "没有可用库";
       saveSettings({ serverUrl: base, selectedLibrary: selected });
       setResult(elements.connectionResult, `连接正常：${health.library.name}，桥接服务 ${health.version || "可用"}。`, "success");
+      connectRemoteEvents();
       updateSyncButton();
       await refreshItemCounts(false);
       return true;
@@ -228,6 +291,68 @@
     return output;
   }
 
+  function folderParentId(folder) {
+    return typeof folder?.parent === "string" ? folder.parent : folder?.parent?.id || null;
+  }
+
+  function sourceFolderMarker(folder) {
+    return String(folder?.description || "").match(/pichome-sync:folder:([A-Za-z0-9_-]+)/)?.[1] || null;
+  }
+
+  async function reconcileFolderOrder(root, sourceFolders, localByMarker, legacyUnclassified) {
+    if (!root) return 0;
+    let reordered = 0;
+    for (const source of sourceFolders || []) {
+      const localFolder = localByMarker.get(source.id);
+      const expectedParent = source.parent ? localByMarker.get(source.parent) : root;
+      if (!localFolder || !expectedParent || folderParentId(localFolder) === expectedParent.id) continue;
+      localFolder.parent = expectedParent.id;
+      await localFolder.save();
+      reordered += 1;
+    }
+
+    const siblingGroups = new Map();
+    for (const source of sourceFolders || []) {
+      const key = source.parent || "";
+      if (!siblingGroups.has(key)) siblingGroups.set(key, []);
+      siblingGroups.get(key).push(source.id);
+    }
+    for (const [parentSourceId, desiredIds] of siblingGroups) {
+      const parentFolder = parentSourceId ? localByMarker.get(parentSourceId) : root;
+      if (!parentFolder || desiredIds.length < 2) continue;
+      const freshParent = await eagle.folder.getById(parentFolder.id);
+      const desiredSet = new Set(desiredIds);
+      const currentIds = (freshParent?.children || []).map(sourceFolderMarker).filter((id) => desiredSet.has(id));
+      if (currentIds.length === desiredIds.length && currentIds.every((id, index) => id === desiredIds[index])) continue;
+
+      const stagingParent = parentFolder.id === root.id ? null : root.id;
+      for (const sourceId of desiredIds) {
+        const mapped = localByMarker.get(sourceId);
+        if (!mapped) continue;
+        const folder = await eagle.folder.getById(mapped.id);
+        if (!folder) continue;
+        folder.parent = stagingParent;
+        await folder.save();
+      }
+      for (const sourceId of desiredIds) {
+        const mapped = localByMarker.get(sourceId);
+        if (!mapped) continue;
+        const folder = await eagle.folder.getById(mapped.id);
+        if (!folder) continue;
+        folder.parent = parentFolder.id;
+        await folder.save();
+      }
+      if (parentFolder.id === root.id && legacyUnclassified && folderParentId(legacyUnclassified) === root.id) {
+        legacyUnclassified.parent = null;
+        await legacyUnclassified.save();
+        legacyUnclassified.parent = root.id;
+        await legacyUnclassified.save();
+      }
+      reordered += desiredIds.length;
+    }
+    return reordered;
+  }
+
   async function refreshItemCounts(refreshRemote = false) {
     const libraryId = elements.librarySelect?.value || readSettings().selectedLibrary;
     try {
@@ -248,11 +373,7 @@
     try {
       const folders = flattenLocalFolders(await eagle.folder.getAll());
       const root = folders.find((folder) => String(folder.description || "").includes(`pichome-sync:library:${libraryId}`));
-      if (!root) {
-        elements.eagleItemCount.textContent = "0";
-        return;
-      }
-      const managedIds = new Set([root.id]);
+      const managedIds = new Set(root ? [root.id] : []);
       let changed = true;
       while (changed) {
         changed = false;
@@ -265,7 +386,8 @@
         }
       }
       const items = await eagle.item.getAll();
-      const count = (items || []).filter((item) => !item.isDeleted && itemFolderIds(item).some((id) => managedIds.has(id))).length;
+      const mappedLocalIds = new Set(Object.values(readSettings().imported?.[libraryId] || {}));
+      const count = (items || []).filter((item) => !item.isDeleted && (mappedLocalIds.has(item.id) || itemFolderIds(item).some((id) => managedIds.has(id)))).length;
       elements.eagleItemCount.textContent = String(count);
     } catch (_) {
       elements.eagleItemCount.textContent = "--";
@@ -285,13 +407,6 @@
     if (!root) {
       root = await eagle.folder.create({ name: `Pichome · ${library.name}`, description: `pichome-sync:library:${library.id}` });
       localByMarker.set(library.id, root);
-    }
-    if (!unclassified) {
-      unclassified = await eagle.folder.create({
-        name: "未分类",
-        description: `Pichome 中没有所属文件夹的素材\npichome-sync:unclassified:${library.id}`,
-        parent: root.id
-      });
     }
     const sourceById = new Map(sourceFolders.map((folder) => [folder.id, folder]));
     const creating = new Map();
@@ -315,6 +430,7 @@
     }
     const result = new Map();
     for (const sourceId of requiredIds) result.set(sourceId, await ensureSourceFolder(sourceId));
+    await reconcileFolderOrder(root, sourceFolders, localByMarker, unclassified);
     return { root, unclassified, sourceToLocal: result };
   }
 
@@ -446,7 +562,6 @@
             delete libraryImported[source.id];
           }
           const folderIds = (source.folders || []).map((id) => targets.sourceToLocal.get(id)?.id).filter(Boolean);
-          if (!folderIds.length) folderIds.push(targets.unclassified.id);
           libraryImported[source.id] = await importItem(source, folderIds, (loaded, total) => setItemProgress(source.name, loaded, total));
           setItemProgress(source.name, 1, 1, true);
           added += 1;
@@ -652,11 +767,11 @@
           }
         }
 
-        if (localItem && !remoteState.isDeleted && !(remoteState.folders || []).length && folderContext.root && folderContext.unclassified) {
+        if (localItem && !remoteState.isDeleted && !(remoteState.folders || []).length && localState.folders.length === 0) {
           const managedFolders = itemFolderIds(localItem).filter((id) => folderContext.managedLocalIds.has(id));
-          if (managedFolders.length === 1 && managedFolders[0] === folderContext.root.id) {
+          if (managedFolders.length) {
             const unmanagedFolders = itemFolderIds(localItem).filter((id) => !folderContext.managedLocalIds.has(id));
-            localItem.folders = sortedUnique([...unmanagedFolders, folderContext.unclassified.id]);
+            localItem.folders = sortedUnique(unmanagedFolders);
             await localItem.save();
             moved += 1;
             localState = localStateForItem(localItem, folderContext);
@@ -740,7 +855,6 @@
             }
             if (localItem && !remoteState.isDeleted && !arraysEqual(remoteState.folders, localState.folders)) {
               const localFolders = sortedUnique((remoteState.folders || []).map((id) => folderContext.localByRemote.get(id)).filter(Boolean));
-              if (!localFolders.length && folderContext.unclassified) localFolders.push(folderContext.unclassified.id);
               const unmanagedFolders = itemFolderIds(localItem).filter((id) => !folderContext.managedLocalIds.has(id));
               setResult(elements.syncResult, `双向同步：正在更新 ${localItem.name} 的分类`);
               localItem.folders = sortedUnique([...unmanagedFolders, ...localFolders]);
@@ -909,6 +1023,7 @@
     const settings = readSettings();
     saveSettings({ autoMode: mode, enabled: mode === "off" ? settings.enabled : true });
     renderState();
+    refreshReactiveSync();
     if (mode !== "off") runAutoCycle();
   }
 
@@ -927,7 +1042,7 @@
     const settings = readSettings();
     elements.serverUrl.value = settings.serverUrl || DEFAULT_SERVER;
     renderState();
-    elements.syncToggle.addEventListener("change", () => { saveSettings({ enabled: elements.syncToggle.checked }); renderState(); if (elements.syncToggle.checked) runAutoCycle(); });
+    elements.syncToggle.addEventListener("change", () => { saveSettings({ enabled: elements.syncToggle.checked }); renderState(); refreshReactiveSync(); if (elements.syncToggle.checked) runAutoCycle(); });
     elements.oneWayToggle.addEventListener("change", () => setAutoMode(elements.oneWayToggle.checked ? "one-way" : "off"));
     elements.twoWayToggle.addEventListener("change", () => {
       if (!elements.twoWayToggle.checked) return setAutoMode("off");
@@ -965,6 +1080,7 @@
         const serverUrl = normalizedServer();
         elements.serverUrl.value = serverUrl;
         saveSettings({ serverUrl });
+        connectRemoteEvents();
         setResult(elements.connectionResult, "设置已保存。", "success");
       } catch (error) { setResult(elements.connectionResult, error.message, "error"); }
     });
@@ -988,7 +1104,11 @@
       runAutoCycle();
     });
     eagle.onLibraryChanged(() => { detectEagle(); runAutoCycle(); });
-    if (typeof eagle.onPluginBeforeExit === "function") eagle.onPluginBeforeExit(() => { if (autoTimer) clearInterval(autoTimer); });
+    if (typeof eagle.onPluginBeforeExit === "function") eagle.onPluginBeforeExit(() => {
+      if (autoTimer) clearInterval(autoTimer);
+      if (triggerTimer) clearTimeout(triggerTimer);
+      closeReactiveSync();
+    });
   } else {
     window.addEventListener("DOMContentLoaded", initialize, { once: true });
   }
