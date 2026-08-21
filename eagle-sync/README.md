@@ -1,4 +1,4 @@
-# Pichome Sync 0.7.1
+# Pichome Sync 0.7.2
 
 通过 Tailscale 在 Linux 服务器上的 Pichome/Eagle 素材库与其他电脑的 Eagle 之间同步。
 
@@ -38,7 +38,7 @@
 
 ## 安装
 
-双击 `Pichome-Sync-0.7.1.eagleplugin`，或将其拖入 Eagle 窗口。插件作为后台服务启动；点击插件图标时会显示设置窗口。
+双击 `Pichome-Sync-0.7.2.eagleplugin`，或将其拖入 Eagle 窗口。插件作为后台服务启动；点击插件图标时会显示设置窗口。
 
 1. 确认两台电脑都连接同一 Tailscale。
 2. 点击“测试连接”。
@@ -51,4 +51,4 @@
 - systemd 服务：`pichome-eagle-sync.service`
 - 本地监听：`127.0.0.1:43127`
 - Tailscale Serve：`https://wang.tail26a65a.ts.net:8452/`
-- API 版本：0.7.1（下载、上传、Pichome 索引权威强制镜像、近实时事件通知、分类更新、未分类映射、软删除 tombstone、操作日志和最新操作判定）
+- API 版本：0.7.2（下载、兼容 Eagle 旧版 Node 的上传、Pichome 索引权威强制镜像、近实时事件通知、分类更新、未分类映射、软删除 tombstone、操作日志和最新操作判定）

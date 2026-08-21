@@ -569,13 +569,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         service: "Pichome Sync Bridge",
-        version: "0.7.1",
+        version: "0.7.2",
         message: "Tailscale connection is working. Use the Eagle plugin to synchronize.",
         library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length }
       });
     }
     if (url.pathname === "/api/v1/health") {
-      return json(res, 200, { ok: true, service: "pichome-eagle-sync", version: "0.7.1", capabilities: { download: true, upload: true, delete: true, folderSync: true, unclassifiedMapping: true, folderOrderMetadata: true, realtimeEvents: true, forceMirror: true, pichomeIndexAuthority: true, sourceReconcile: true, conflictProtection: true, operationLog: true, latestOperationWins: true }, library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length } });
+      return json(res, 200, { ok: true, service: "pichome-eagle-sync", version: "0.7.2", capabilities: { download: true, upload: true, delete: true, folderSync: true, unclassifiedMapping: true, folderOrderMetadata: true, realtimeEvents: true, forceMirror: true, pichomeIndexAuthority: true, sourceReconcile: true, conflictProtection: true, operationLog: true, latestOperationWins: true }, library: { id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length } });
     }
     if (url.pathname === "/api/v1/libraries") {
       return json(res, 200, { libraries: [{ id: LIBRARY_ID, name: LIBRARY_NAME, itemCount: current.items.length, folderCount: current.folders.length, version: current.fingerprint }] });

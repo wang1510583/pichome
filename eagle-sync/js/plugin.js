@@ -627,7 +627,14 @@
     const size = fs.statSync(filePath).size;
     const encodedMetadata = Buffer.from(JSON.stringify(metadata), "utf8").toString("base64url");
     return new Promise((resolve, reject) => {
-      const request = transport.request(url, {
+      // Eagle may bundle an older Node.js runtime where request(URL, options,
+      // callback) treats the options object as the listener. Supplying one
+      // plain options object keeps uploads compatible with old and new Node.
+      const request = transport.request({
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || undefined,
+        path: `${url.pathname}${url.search}`,
         method: "POST",
         headers: {
           "Content-Type": "application/octet-stream",
