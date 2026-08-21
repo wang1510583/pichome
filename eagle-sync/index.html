@@ -11,7 +11,7 @@
       <header class="hero">
         <img class="logo" src="logo.png" alt="Pichome Sync" />
         <div class="hero-copy">
-          <p class="eyebrow">Pichome Sync · 0.6.0</p>
+          <p class="eyebrow">Pichome Sync · 0.7.0</p>
           <h1>素材同步</h1>
           <p class="subtitle">通过 Tailscale 连接 Pichome 与 Eagle</p>
         </div>
@@ -30,9 +30,15 @@
           <span class="mode-state">开启</span>
         </button>
 
-        <button id="syncButton" class="mode-button manual" type="button" disabled>
+        <button id="forceFromPichomeButton" class="mode-button force-from" type="button" disabled>
           <span class="mode-icon" aria-hidden="true">↓</span>
-          <span class="mode-copy"><strong>手动同步</strong><small>按更多设置中的数量立即导入</small></span>
+          <span class="mode-copy"><strong>Pichome 同步到 Eagle</strong><small>以 Pichome 为准，强制完整覆盖 Eagle 同步范围</small></span>
+          <span class="mode-state">执行</span>
+        </button>
+
+        <button id="forceToPichomeButton" class="mode-button force-to" type="button" disabled>
+          <span class="mode-icon" aria-hidden="true">↑</span>
+          <span class="mode-copy"><strong>Eagle 同步到 Pichome</strong><small>以 Eagle 为准，强制完整覆盖 Pichome 素材库</small></span>
           <span class="mode-state">执行</span>
         </button>
       </section>
@@ -81,7 +87,7 @@
       <details class="more-settings">
         <summary>
           <span>更多设置</span>
-          <span class="summary-hint">连接、数量与环境</span>
+          <span class="summary-hint">连接与环境</span>
         </summary>
         <div class="settings-content">
           <section class="setting-group master-row">
@@ -114,8 +120,6 @@
           <section class="setting-group compact-grid">
             <label for="librarySelect">Pichome 素材库</label>
             <select id="librarySelect" disabled><option value="">请先测试连接</option></select>
-            <label for="batchSize">手动同步数量</label>
-            <input id="batchSize" type="number" min="1" step="1" value="3" />
           </section>
 
           <section class="setting-group environment">

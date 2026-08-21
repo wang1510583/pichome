@@ -73,7 +73,8 @@ h2 { margin: 0; font-size: 14px; line-height: 1.25; letter-spacing: -.01em; }
   font-weight: 700;
 }
 .two-way .mode-icon { color: var(--indigo); background: rgba(101, 88, 232, .11); }
-.manual .mode-icon { color: var(--green); background: rgba(24, 132, 93, .11); }
+.force-from .mode-icon { color: var(--green); background: rgba(24, 132, 93, .11); }
+.force-to .mode-icon { color: #c06b22; background: rgba(192, 107, 34, .11); }
 .mode-copy { display: grid; gap: 3px; min-width: 0; }
 .mode-copy strong { font-size: 15px; line-height: 1.2; letter-spacing: -.01em; }
 .mode-copy small { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
