@@ -22,6 +22,44 @@ function pichome_remote_request_data() {
     return $data;
 }
 
+function pichome_eagle_find_duplicate($appdata, $md5, $size) {
+    $md5 = strtolower(trim(strval($md5)));
+    $size = intval($size);
+    if (!$appdata || intval($appdata['type']) !== 0 || !preg_match('/^[a-f0-9]{32}$/', $md5) || $size < 1) {
+        return array();
+    }
+
+    $library = realpath($appdata['path']);
+    $imagesRoot = $library ? realpath($library . DIRECTORY_SEPARATOR . 'images') : false;
+    if (!$library || !$imagesRoot) return array();
+    $imagesPrefix = rtrim($imagesRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+    $candidates = DB::fetch_all(
+        'select r.rid,r.name,r.size,r.md5,a.path from %t r inner join %t a on a.rid=r.rid and a.appid=r.appid where r.appid=%s and r.isdelete=0 and r.size=%d',
+        array('pichome_resources', 'pichome_resources_attr', $appdata['appid'], $size)
+    );
+    foreach ($candidates as $candidate) {
+        $candidateMd5 = strtolower(trim(strval($candidate['md5'])));
+        if (!preg_match('/^[a-f0-9]{32}$/', $candidateMd5)) {
+            $relativePath = ltrim(str_replace('\\', '/', strval($candidate['path'])), '/');
+            $fullPath = realpath($library . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath));
+            if (!$fullPath || !is_file($fullPath) || strpos($fullPath, $imagesPrefix) !== 0) continue;
+            $candidateMd5 = strtolower(strval(@md5_file($fullPath)));
+            if (!preg_match('/^[a-f0-9]{32}$/', $candidateMd5)) continue;
+            C::t('pichome_resources')->update($candidate['rid'], array('md5' => $candidateMd5));
+        }
+        if (hash_equals($candidateMd5, $md5)) {
+            return array(
+                'rid' => $candidate['rid'],
+                'name' => $candidate['name'],
+                'size' => intval($candidate['size']),
+                'md5' => $candidateMd5
+            );
+        }
+    }
+    return array();
+}
+
 function pichome_remote_public_ipv4($host) {
     if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
         return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) ? $host : '';
@@ -189,6 +227,17 @@ if ($operation === 'remoteupload') {
     }
     $download = pichome_remote_download_media($sourceUrl);
     if (!empty($download['error'])) pichome_remote_json(false, array(), $download['error']);
+    $downloadMd5 = strtolower(strval(@md5_file($download['path'])));
+    $duplicateAction = isset($request['duplicate_action']) ? trim($request['duplicate_action']) : 'check';
+    $duplicate = pichome_eagle_find_duplicate($appdata, $downloadMd5, $download['size']);
+    if ($duplicate && $duplicateAction !== 'upload') {
+        @unlink($download['path']);
+        pichome_remote_json(true, array(
+            'duplicate' => true,
+            'existing' => $duplicate,
+            'filename' => $download['filename']
+        ), '检测到内容完全相同的素材');
+    }
     try {
         $result = IO::uploadStream($download['path'], $download['filename'], $appid, $pfid, '', array());
     } catch (Throwable $error) {
@@ -291,20 +340,32 @@ elseif ( $operation == 'uploads' ) { //上传新文件(指新建)
     exit();
 
 } elseif ( $operation == 'chkmd5' ) {//检查是否已有文件
-    $md5 = isset($_GET['md5']) ? trim($_GET['md5']) : '';
-    $path = isset($_GET['relativePath']) ? trim($_GET['relativePath']) : '';
-    $pfid = isset($_GET['pfid']) ? trim($_GET['pfid']) : '';
-    $appid = isset($_GET['appid']) ? trim($_GET['appid']) : '';
+    $request = pichome_remote_request_data();
+    $md5 = isset($request['md5']) ? trim($request['md5']) : '';
+    $path = isset($request['relativePath']) ? trim($request['relativePath']) : '';
+    $pfid = isset($request['pfid']) ? trim($request['pfid']) : '';
+    $appid = isset($request['appid']) ? trim($request['appid']) : '';
+    $size = isset($request['size']) ? intval($request['size']) : 0;
     if (!$appid) {
         $data['error'] = 'uploadfailer';
         $data['msg'] = '缺少appid';
         exit(json_encode(array('success' => true, 'data' => $data)));
     }
     $chkappdata = C::t('pichome_vapp')->fetch($appid);
-    // Eagle files must always pass through the Eagle writer. Reusing a normal
-    // FilePress attachment here would create only a database copy and would not
-    // put the file into the .library package.
+    // Eagle files must always pass through the Eagle writer. For those libraries
+    // this endpoint only reports an exact content duplicate; it never mutates the
+    // library before the user chooses whether to upload or skip.
     if ($chkappdata && intval($chkappdata['type']) === 0) {
+        if (intval($_G['adminid']) !== 1 && intval($chkappdata['uid']) !== intval($_G['uid'])) {
+            exit(json_encode(array('success' => false, 'msg' => '没有 Eagle 素材库写入权限'), JSON_UNESCAPED_UNICODE));
+        }
+        $duplicate = pichome_eagle_find_duplicate($chkappdata, $md5, $size);
+        if ($duplicate) {
+            exit(json_encode(array(
+                'success' => true,
+                'data' => array('duplicate' => true, 'existing' => $duplicate)
+            ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        }
         exit(json_encode(array('success' => false)));
     }
     if ($md5) {

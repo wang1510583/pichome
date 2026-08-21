@@ -592,15 +592,29 @@
 				let fid = this.UploadCurrentFolderId();
 				if(fid === 'root' || fid === '0') fid = '';
 				let succeeded = 0;
+				let skipped = 0;
 				const errors = [];
 				this.$message({type:'info', message:'正在下载 '+urls.length+' 个在线素材…'});
 				for(const url of urls){
 					try{
-						const {data: response} = await axios.post(MOD_URL+'&op=library&do=upload&operation=remoteupload', {
+						let {data: response} = await axios.post(MOD_URL+'&op=library&do=upload&operation=remoteupload', {
 							url:url,
 							appid:this.DocumentAppid,
 							pfid:fid
 						});
+						if(response && response.success && response.data && response.data.duplicate){
+							const uploadDuplicate = await this.UploadConfirmDuplicate(response.data.existing, response.data.filename);
+							if(!uploadDuplicate){
+								skipped += 1;
+								continue;
+							}
+							({data: response} = await axios.post(MOD_URL+'&op=library&do=upload&operation=remoteupload', {
+								url:url,
+								appid:this.DocumentAppid,
+								pfid:fid,
+								duplicate_action:'upload'
+							}));
+						}
 						if(response && response.success) succeeded += 1;
 						else errors.push((response && (response.msg || response.message)) || '下载失败');
 					}catch(error){
@@ -614,7 +628,8 @@
 					else this.LeftTreeGetFolderNum();
 					if(this.LeftGetAllNum) this.LeftGetAllNum();
 				}
-				if(errors.length) this.$message({type:'warning', message:'在线素材添加 '+succeeded+' 个，失败 '+errors.length+' 个：'+errors[0]});
+				if(errors.length) this.$message({type:'warning', message:'在线素材添加 '+succeeded+' 个，跳过 '+skipped+' 个，失败 '+errors.length+' 个：'+errors[0]});
+				else if(skipped) this.$message({type:'info', message:'在线素材添加 '+succeeded+' 个，已跳过 '+skipped+' 个重复项'});
 				else this.$message({type:'success', message:'已添加 '+succeeded+' 个在线素材'});
 			},
 			async ImageUploadDropEvent(e) {

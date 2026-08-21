@@ -274,6 +274,7 @@ class io_dzz extends io_api
             @chmod($destination, 0664);
 
             $size = fix_integer_overflow(filesize($destination));
+            $contentMd5 = strtolower(strval(@md5_file($destination)));
             $width = 0;
             $height = 0;
             $duration = 0;
@@ -361,6 +362,9 @@ class io_dzz extends io_api
 
             $record = C::t('#eagle#eagle_record')->fetch_by_eid($id, $appdata['appid']);
             if (!$record || !$record['rid']) throw new Exception('Eagle 文件已保存，但网页索引更新失败');
+            if (preg_match('/^[a-f0-9]{32}$/', $contentMd5)) {
+                C::t('pichome_resources')->update($record['rid'], array('md5' => $contentMd5));
+            }
             C::t('pichome_vapp')->update($appdata['appid'], array('filenum' => intval($appdata['filenum']) + 1));
             if ($folderdata['fid']) {
                 DB::query('update %t set filenum=filenum+1 where fid=%s and appid=%s', array('pichome_folder', $folderdata['fid'], $appdata['appid']));

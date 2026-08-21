@@ -122,6 +122,8 @@
 					fqueue:[],//上传队列
 					queuenid:0,//当前上传的id
 					folderData:[],//储存文件夹数据
+					contentHashOwners:{},//同一批次内的内容哈希，用于阻止并发重复上传
+					duplicatePromptQueue:Promise.resolve(),//串行显示重复确认弹窗
 					visible:false
 				},
 				clouddata:{
@@ -148,6 +150,36 @@
 			}
 		},
 		methods: {
+			UploadConfirmDuplicate(duplicate, filename){
+				const self = this;
+				const existingName = duplicate && duplicate.name ? duplicate.name : '已有素材';
+				const uploadName = filename || existingName;
+				const runPrompt = function(){
+					return self.$messageBox.confirm(
+						'“'+uploadName+'”与素材库中的“'+existingName+'”内容完全相同。是否仍然重复上传？',
+						'检测到重复素材',
+						{
+							confirmButtonText:'仍然上传',
+							cancelButtonText:'跳过',
+							type:'warning',
+							icon:'QuestionFilled',
+							closeOnClickModal:false,
+							closeOnPressEscape:false
+						}
+					).then(function(){ return true; }).catch(function(){ return false; });
+				};
+				const waiting = this.UploaderData.duplicatePromptQueue || Promise.resolve();
+				const decision = waiting.then(runPrompt, runPrompt);
+				this.UploaderData.duplicatePromptQueue = decision.then(function(){}, function(){});
+				return decision;
+			},
+			UploadSkipDuplicate(item){
+				item['duplicateSkipped'] = true;
+				item['fileStatus'] = 3;
+				item['percentage'] = item.size;
+				this.$message({type:'info', message:'已跳过重复素材：'+item.raw.name});
+				this.UploadAccomplish(item);
+			},
 			// Resolve the real folder selected in the category tree. Capture this
 			// when files are chosen so navigation during an upload cannot move them.
 			UploadCurrentFolderId(){
@@ -323,10 +355,23 @@
 						item['fileStatus'] = 1;
 						item['md5'] = await this.getSparkMd5(item.raw,item.id);
 					}
+					const batchOwner = this.UploaderData.contentHashOwners[item['md5']];
+					if(batchOwner && batchOwner.id !== item.id){
+						const uploadDuplicate = await this.UploadConfirmDuplicate({name:batchOwner.raw.name}, item.raw.name);
+						if(!uploadDuplicate){
+							this.UploadSkipDuplicate(item);
+							return;
+						}
+						item['duplicateApproved'] = true;
+					}else{
+						this.UploaderData.contentHashOwners[item['md5']] = item;
+					}
 
 					let param = {
 						md5:item['md5'],
 						appid:this.DocumentAppid,
+						size:item.size,
+						filename:item.raw.name,
 					}
 				
 					let argments = this.UploadExportLocation(this.UploaderData.folderData,item);
@@ -337,7 +382,24 @@
 						param.relativePath = argments.relativePath;
 					}
 					axios.post(MOD_URL+'&op=library&do=upload&operation=chkmd5',param)
-					.then(({data: res})=>{
+					.then(async ({data: res})=>{
+						if(res.success && res.data && res.data.duplicate){
+							if(item['duplicateApproved']){
+								item['fileStatus'] = 2;
+								item['percentage'] = 0;
+								self.multiupload(item);
+								return;
+							}
+							const uploadDuplicate = await self.UploadConfirmDuplicate(res.data.existing, item.raw.name);
+							if(uploadDuplicate){
+								item['fileStatus'] = 2;
+								item['percentage'] = 0;
+								self.multiupload(item);
+							}else{
+								self.UploadSkipDuplicate(item);
+							}
+							return;
+						}
 						if(res.success){
 							item['rid'] = res.data.rid;
 							// if(res.data.rid){
