@@ -608,6 +608,12 @@
 				}
 				e.preventDefault();
 				const dataTransfer = e.dataTransfer;
+				const remoteUrls = await this.ImageDropExtractRemoteUrls(dataTransfer);
+				if(remoteUrls.length){
+					await this.ImageUploadRemoteUrls(remoteUrls);
+					this.DocumentDropActive = false;
+					return false;
+				}
 
 				let localFileCount = 0;
 				if(dataTransfer.items && dataTransfer.items.length){
@@ -630,9 +636,7 @@
 					}
 				}
 				if(!localFileCount){
-					const remoteUrls = await this.ImageDropExtractRemoteUrls(dataTransfer);
-					if(remoteUrls.length) await this.ImageUploadRemoteUrls(remoteUrls);
-					else this.$message({type:'warning', message:'没有识别到可上传的本地文件或在线图片地址'});
+					this.$message({type:'warning', message:'没有识别到可上传的本地文件或在线图片地址'});
 				}
 			
 				this.DocumentDropActive = false;

@@ -224,6 +224,32 @@ elseif ( $operation == 'uploads' ) { //上传新文件(指新建)
 	if (intval($appdata['type']) === 0 && (!is_dir($appdata['path']) || !is_writable($appdata['path']))) {
 		exit(json_encode(array('files' => array(array('error' => 'Eagle 素材库目录不可写')))));
 	}
+	// Browser image drags can contain valid bytes but an extensionless name such
+	// as "640".  The chunk uploader normally relies on Content-Disposition for
+	// the name, so normalize both that header and PHP's multipart metadata.
+	$disposition = isset($_SERVER['HTTP_CONTENT_DISPOSITION']) ? $_SERVER['HTTP_CONTENT_DISPOSITION'] : '';
+	$uploadName = '';
+	if ($disposition && preg_match('/filename="([^"]*)"/i', $disposition, $nameMatch)) {
+		$uploadName = rawurldecode($nameMatch[1]);
+	}
+	if (!$uploadName && isset($_FILES['files']['name'][0])) $uploadName = $_FILES['files']['name'][0];
+	if ($uploadName && pathinfo($uploadName, PATHINFO_EXTENSION) === '') {
+		$tmpName = isset($_FILES['files']['tmp_name'][0]) ? $_FILES['files']['tmp_name'][0] : '';
+		if ($tmpName && is_uploaded_file($tmpName)) {
+			$finfo = new finfo(FILEINFO_MIME_TYPE);
+			$mime = strtolower(strval($finfo->file($tmpName)));
+			$mimeExtensions = array(
+				'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
+				'image/webp' => 'webp', 'image/bmp' => 'bmp', 'image/x-ms-bmp' => 'bmp',
+				'image/svg+xml' => 'svg'
+			);
+			if (isset($mimeExtensions[$mime])) {
+				$uploadName .= '.' . $mimeExtensions[$mime];
+				$_SERVER['HTTP_CONTENT_DISPOSITION'] = 'attachment; filename="' . rawurlencode($uploadName) . '"';
+				$_FILES['files']['name'][0] = $uploadName;
+			}
+		}
+	}
     //$space = dzzgetspace( $uid );
 
     //$space[ 'self' ] = intval( $space[ 'self' ] );
