@@ -356,7 +356,10 @@
 					if(rootDocument.getElementById(styleId)) return;
 					const style = rootDocument.createElement('style');
 					style.id = styleId;
-					style.textContent = '.xgplayer-skin-default .xgplayer-start{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}';
+					style.textContent = [
+						'.xgplayer-skin-default .xgplayer-start{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}',
+						'.xgplayer-skin-default .xgplayer-controls{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;}'
+					].join('');
 					(rootDocument.head || rootDocument.documentElement).appendChild(style);
 				}catch(error){}
 			},
