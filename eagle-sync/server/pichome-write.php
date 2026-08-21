@@ -105,6 +105,63 @@ if ($operation === 'state') {
     finish_json(array('ok' => true, 'items' => $items));
 }
 
+if ($operation === 'reconcile') {
+    $changed = 0;
+    $changedIds = array();
+    $jsonflags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+    foreach (DB::fetch_all(
+        'select e.eid from %t e inner join %t r on e.rid=r.rid where e.appid=%s',
+        array('eagle_record', 'pichome_resources', $appid)
+    ) as $entry) {
+        $sourceId = strval($entry['eid']);
+        $state = load_item_state($appid, $sourceId);
+        if (!$state) continue;
+        $metadatafile = rtrim($appdata['path'], '/\\') . DIRECTORY_SEPARATOR . 'images' . DIRECTORY_SEPARATOR . $sourceId . '.info' . DIRECTORY_SEPARATOR . 'metadata.json';
+        if (!is_file($metadatafile) || !is_writable($metadatafile)) continue;
+        $lock = @fopen($metadatafile . '.lock', 'c+');
+        if (!$lock || !flock($lock, LOCK_EX)) { if ($lock) fclose($lock); continue; }
+        $metadata = json_decode(file_get_contents($metadatafile), true);
+        if (!is_array($metadata)) { flock($lock, LOCK_UN); fclose($lock); continue; }
+        $currentFolders = array_values(array_unique(array_map('strval', is_array($metadata['folders'] ?? null) ? $metadata['folders'] : array())));
+        $desiredFolders = array_values(array_unique(array_map('strval', $state['folders'])));
+        sort($currentFolders, SORT_STRING);
+        sort($desiredFolders, SORT_STRING);
+        $desiredDeleted = boolval($state['isDeleted']);
+        if ($currentFolders !== $desiredFolders || boolval($metadata['isDeleted'] ?? false) !== $desiredDeleted) {
+            $nowms = (int) round(microtime(true) * 1000);
+            $metadata['folders'] = $desiredFolders;
+            $metadata['isDeleted'] = $desiredDeleted;
+            $metadata['mtime'] = $nowms;
+            $metadata['modificationTime'] = $nowms;
+            $metadata['lastModified'] = $nowms;
+            $tmpfile = $metadatafile . '.tmp.' . getmypid();
+            $saved = file_put_contents($tmpfile, json_encode($metadata, $jsonflags), LOCK_EX) !== false && @rename($tmpfile, $metadatafile);
+            if (!$saved) @unlink($tmpfile);
+            else { @chmod($metadatafile, 0664); $changed += 1; $changedIds[] = $sourceId; }
+        }
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+    if ($changed) {
+        $mtimefile = rtrim($appdata['path'], '/\\') . DIRECTORY_SEPARATOR . 'mtime.json';
+        $mtimelock = @fopen($mtimefile . '.lock', 'c+');
+        if ($mtimelock && flock($mtimelock, LOCK_EX)) {
+            $mtimedata = is_file($mtimefile) ? json_decode(file_get_contents($mtimefile), true) : array();
+            if (!is_array($mtimedata)) $mtimedata = array();
+            $nowms = (int) round(microtime(true) * 1000);
+            foreach ($changedIds as $sourceId) $mtimedata[$sourceId] = $nowms;
+            $mtimedata['all'] = isset($mtimedata['all']) ? intval($mtimedata['all']) + 1 : 1;
+            $mtimetmp = $mtimefile . '.tmp.' . getmypid();
+            if (file_put_contents($mtimetmp, json_encode($mtimedata, $jsonflags), LOCK_EX) !== false) @rename($mtimetmp, $mtimefile);
+            else @unlink($mtimetmp);
+            @chmod($mtimefile, 0664);
+            flock($mtimelock, LOCK_UN);
+        }
+        if ($mtimelock) fclose($mtimelock);
+    }
+    finish_json(array('ok' => true, 'changed' => $changed, 'items' => $changedIds));
+}
+
 if ($operation === 'mutate') {
     $sourceId = isset(PICHOME_SYNC_CLI_ARGS[3]) ? trim(PICHOME_SYNC_CLI_ARGS[3]) : '';
     $encoded = isset(PICHOME_SYNC_CLI_ARGS[4]) ? PICHOME_SYNC_CLI_ARGS[4] : '';

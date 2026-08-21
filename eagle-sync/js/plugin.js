@@ -77,6 +77,18 @@
     return response.json();
   }
 
+  async function postApi(pathname, body = {}) {
+    const response = await fetch(new URL(pathname.replace(/^\//, ""), normalizedServer()).href, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    let result = {};
+    try { result = await response.json(); } catch (_) {}
+    if (!response.ok) throw new Error(result.message || result.error || `同步服务返回 HTTP ${response.status}`);
+    return result;
+  }
+
   function setResult(element, message, type) {
     if (!element) return;
     element.textContent = message;
@@ -773,8 +785,7 @@
       "确认用 Pichome 强制覆盖 Eagle？\n\n" +
       "• Pichome 的全部有效素材会导入或覆盖到 Eagle\n" +
       "• 名称、标签、备注、评分、分类、未分类和导入时间以 Pichome 为准\n" +
-      "• Eagle 同步范围内多出来的素材会移入回收站\n" +
-      "• Eagle 其他无关文件夹和素材不会处理\n\n" +
+      "• Eagle 当前素材库中所有多出来的素材都会移入回收站\n\n" +
       "该操作不会物理删除原文件，但可能产生大量移动和下载。"
     );
     if (!confirmed) return;
@@ -789,25 +800,28 @@
     let updatedCount = 0;
     let trashedCount = 0;
     try {
-      setResult(elements.syncResult, "正在读取 Pichome 全量清单…");
+      setResult(elements.syncResult, "正在校准 Pichome 数据库与源素材库…");
+      const reconciled = await postApi(`api/v1/libraries/${libraryId}/reconcile-source`);
+      setResult(elements.syncResult, `Pichome 索引已校准 ${Number(reconciled.changed || 0)} 项，正在读取全量清单…`);
       const [remoteItems, remoteStateData, remoteFolderData] = await Promise.all([
         loadAllRemoteItems(libraryId),
         api(`api/v1/libraries/${libraryId}/state`),
         api(`api/v1/libraries/${libraryId}/folders`)
       ]);
-      const folderContext = await buildFolderContext(library, remoteFolderData.folders || []);
       const targets = await ensureFolderTargets(library, remoteFolderData.folders || [], new Set((remoteFolderData.folders || []).map((folder) => folder.id)));
+      const remoteStateById = new Map((remoteStateData.items || []).map((item) => [item.id, item]));
       let localItems = await eagle.item.getAll();
       const localById = new Map((localItems || []).map((item) => [item.id, item]));
       const settings = readSettings();
       const libraryImported = mappingsFromAnnotations(localItems, settings.imported?.[libraryId] || {});
       const claimedLocalIds = new Set();
-      const activeRemoteIds = new Set(remoteItems.map((item) => item.id));
       const total = remoteItems.length + localItems.length;
       let current = 0;
       setOverallProgress(0, total);
 
       for (const source of remoteItems) {
+        const pichomeState = remoteStateById.get(source.id);
+        const authoritativeSource = pichomeState ? { ...source, folders: pichomeState.folders || [] } : source;
         current += 1;
         setOverallProgress(current, total);
         setItemProgress(source.name);
@@ -816,9 +830,9 @@
         if (!localItem && libraryImported[source.id]) {
           try { localItem = await eagle.item.getById(libraryImported[source.id]); } catch (_) {}
         }
-        const folderIds = (source.folders || []).map((id) => targets.sourceToLocal.get(id)?.id).filter(Boolean);
+        const folderIds = (authoritativeSource.folders || []).map((id) => targets.sourceToLocal.get(id)?.id).filter(Boolean);
         if (!localItem) {
-          const localId = await importItem(source, folderIds, (loaded, size) => setItemProgress(source.name, loaded, size));
+          const localId = await importItem(authoritativeSource, folderIds, (loaded, size) => setItemProgress(source.name, loaded, size));
           libraryImported[source.id] = localId;
           localItem = await eagle.item.getById(localId);
           localById.set(localId, localItem);
@@ -828,17 +842,17 @@
             await localItem.restoreFromTrash();
             try { localItem = await eagle.item.getById(localItem.id); } catch (_) {}
           }
-          if (Number(source.size) > 0 && Number(localItem.size) > 0 && Number(source.size) !== Number(localItem.size)) {
-            await replaceItemFromPichome(localItem, source, (loaded, size) => setItemProgress(source.name, loaded, size));
+          if (Number(authoritativeSource.size) > 0 && Number(localItem.size) > 0 && Number(authoritativeSource.size) !== Number(localItem.size)) {
+            await replaceItemFromPichome(localItem, authoritativeSource, (loaded, size) => setItemProgress(source.name, loaded, size));
             try { localItem = await eagle.item.getById(localItem.id); } catch (_) {}
           }
-          localItem.name = source.name;
-          localItem.tags = [...(source.tags || [])];
-          localItem.annotation = annotationWithSyncId(source.annotation, source.id);
-          localItem.url = source.website || "";
-          localItem.star = Number(source.star || 0);
+          localItem.name = authoritativeSource.name;
+          localItem.tags = [...(authoritativeSource.tags || [])];
+          localItem.annotation = annotationWithSyncId(authoritativeSource.annotation, source.id);
+          localItem.url = authoritativeSource.website || "";
+          localItem.star = Number(authoritativeSource.star || 0);
           localItem.folders = folderIds;
-          if (Number(source.importedAt) > 0) localItem.importedAt = Number(source.importedAt);
+          if (Number(authoritativeSource.importedAt) > 0) localItem.importedAt = Number(authoritativeSource.importedAt);
           await localItem.save();
           updatedCount += 1;
         }
@@ -847,13 +861,10 @@
       }
 
       localItems = await eagle.item.getAll();
-      const sourceByLocalId = new Map(Object.entries(libraryImported).map(([sourceId, localId]) => [localId, sourceId]));
       for (const item of localItems || []) {
         current += 1;
         setOverallProgress(current, total);
-        const mappedSourceId = sourceByLocalId.get(item.id);
-        const inManagedScope = itemFolderIds(item).some((id) => folderContext.managedLocalIds.has(id));
-        if (!claimedLocalIds.has(item.id) && (inManagedScope || (mappedSourceId && !activeRemoteIds.has(mappedSourceId)))) {
+        if (!claimedLocalIds.has(item.id)) {
           setItemProgress(item.name);
           await item.moveToTrash();
           trashedCount += 1;
@@ -876,10 +887,10 @@
     if (syncRunning) return;
     const confirmed = window.confirm(
       "确认用 Eagle 强制覆盖 Pichome？\n\n" +
-      "• “Pichome · 参考库”同步范围内的新素材会全部上传\n" +
+      "• Eagle 当前素材库中的全部新素材都会上传\n" +
       "• 已映射素材的分类、未分类和删除状态以 Eagle 为准\n" +
       "• Pichome 中在 Eagle 侧不存在的素材会移入回收站\n" +
-      "• Eagle 其他无关素材不会上传\n\n" +
+      "• 不在 Pichome 映射文件夹中的 Eagle 素材会作为未分类上传\n\n" +
       "请确认 Eagle 当前同步范围完整，避免将 Pichome 素材批量移入回收站。"
     );
     if (!confirmed) return;
@@ -891,20 +902,38 @@
     let uploadedCount = 0;
     let updatedCount = 0;
     let trashedCount = 0;
+    syncRunning = true;
+    updateSyncButton();
     try {
-      const uploadResult = await syncNewLocalItems(Number.MAX_SAFE_INTEGER);
-      uploadedCount += Number(uploadResult.uploaded || 0);
-      syncRunning = true;
-      updateSyncButton();
-      const [remoteStateData, remoteFolderData] = await Promise.all([
-        api(`api/v1/libraries/${libraryId}/state`),
-        api(`api/v1/libraries/${libraryId}/folders`)
-      ]);
+      const remoteFolderData = await api(`api/v1/libraries/${libraryId}/folders`);
       const folderContext = await buildFolderContext(library, remoteFolderData.folders || []);
       const localItems = await eagle.item.getAll();
       const localById = new Map((localItems || []).map((item) => [item.id, item]));
       const settings = readSettings();
       const libraryImported = mappingsFromAnnotations(localItems, settings.imported?.[libraryId] || {});
+      const knownLocalIds = new Set(Object.values(libraryImported));
+      const uploadCandidates = (localItems || []).filter((item) => !knownLocalIds.has(item.id));
+      setOverallProgress(0, uploadCandidates.length);
+      let uploadedCurrent = 0;
+      for (const localItem of uploadCandidates) {
+        const filePath = localItem.filePath;
+        if (!filePath || !require("fs").existsSync(filePath)) throw new Error(`${localItem.name} 的原文件不可用，无法上传`);
+        const localState = localStateForItem(localItem, folderContext);
+        const firstFolder = localState.folders[0] || "";
+        const filename = `${localItem.name}.${localItem.ext}`;
+        setResult(elements.syncResult, `Eagle → Pichome：正在上传 ${filename}`);
+        setItemProgress(filename);
+        const response = await uploadFile(filePath, { filename, folderId: firstFolder }, (loaded, size) => setItemProgress(filename, loaded, size));
+        if (!response.item?.id) throw new Error(`${filename} 回传后未收到素材 ID`);
+        libraryImported[response.item.id] = localItem.id;
+        knownLocalIds.add(localItem.id);
+        uploadedCount += 1;
+        uploadedCurrent += 1;
+        setOverallProgress(uploadedCurrent, uploadCandidates.length);
+        setItemProgress(filename, 1, 1, true);
+      }
+
+      const remoteStateData = await api(`api/v1/libraries/${libraryId}/state`);
       const remoteById = new Map((remoteStateData.items || []).map((item) => [item.id, item]));
       const total = remoteById.size;
       let current = 0;
