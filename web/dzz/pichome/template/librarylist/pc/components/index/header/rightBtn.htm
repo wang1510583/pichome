@@ -113,7 +113,8 @@
 					order:'btime',//排序方式
 					sort:'desc',//升序、降序
 					column:['left','right'],//侧边栏
-					layout:'waterFall'//图片布局方式
+					layout:'waterFall',//图片布局方式
+					videoloop: localStorage.getItem('pichome_video_loop') === '1'
 				},
 			}
 		},
@@ -157,6 +158,9 @@
 					case 'layout':
 						this.ImageProps.layout = data.value;
 						localStorage.setItem('layout',data.value);
+					break;
+					case 'videoloop':
+						localStorage.setItem('pichome_video_loop', data.value ? '1' : '0');
 					break;
 				}
 			},

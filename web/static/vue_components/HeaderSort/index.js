@@ -153,6 +153,12 @@ const comsort = {
                         @change="handlechange('column')"
                         label="right" >{{langTxt.text6}}</el-checkbox>
                 </li>
+                <li class="el-dropdown-menu__item">
+                    <el-checkbox 
+                        :size="size"
+                        v-model="PropDefaultVal.videoloop" 
+                        @change="handlechange('videoloop')">{{langTxt.textLoop}}</el-checkbox>
+                </li>
             </template>
             <li class="el-dropdown-menu__item--divided"></li>
             <el-radio-group 
@@ -177,6 +183,7 @@ const comsort = {
             text4:__lang.sortord,
             text5:__lang.Left_column,
             text6:__lang.Right_column,
+            textLoop: (__lang && __lang.videoloop) || '循环播放',
         };
         let SortData = [
             {val:__lang.add_time,key:'btime'},
@@ -225,6 +232,7 @@ const comsort = {
             sort: props.defaultval.sort || '',//升序、降序
             column: props.defaultval.column || [],//侧边栏
             layout: props.defaultval.layout || '',//图片布局方式
+            videoloop: props.defaultval.videoloop !== undefined ? props.defaultval.videoloop : (localStorage.getItem('pichome_video_loop') === '1'),
         });
 
         watch(()=>props.defaultval, (newVal, oldVal)=>{//监听数据变化
@@ -234,6 +242,9 @@ const comsort = {
             PropDefaultVal.sort = newVal.sort || '';
             PropDefaultVal.column = newVal.column || [];
             PropDefaultVal.layout = newVal.layout || '';
+            if (newVal.videoloop !== undefined) {
+                PropDefaultVal.videoloop = newVal.videoloop;
+            }
         },{
             deep: true,
         });
@@ -260,8 +271,14 @@ const comsort = {
                 case 'layout':
                     value = PropDefaultVal.layout;
                 break;
+                case 'videoloop':
+                    value = !!PropDefaultVal.videoloop;
+                    try {
+                        localStorage.setItem('pichome_video_loop', value ? '1' : '0');
+                    } catch (e) {}
+                break;
             }
-            if(value){
+            if(value !== null && value !== undefined){
                 context.emit('change',{
                     type:type,
                     value:value

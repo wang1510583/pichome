@@ -66,6 +66,20 @@
 		var pichomeOriginalMediaUrl = $pichomePlayerSourceJson;
 		var pichomeCacheIdentity = $pichomeCacheIdentityJson;
 		var pichomePlayerMediaUrl = pichomeOriginalMediaUrl;
+		var pichomeIsVideoLoop = false;
+		try {
+			var loopVal = '';
+			if (window.parent && window.parent.localStorage) {
+				loopVal = window.parent.localStorage.getItem('pichome_video_loop');
+			}
+			if (!loopVal && window.top && window.top.localStorage) {
+				loopVal = window.top.localStorage.getItem('pichome_video_loop');
+			}
+			if (!loopVal && window.localStorage) {
+				loopVal = window.localStorage.getItem('pichome_video_loop');
+			}
+			pichomeIsVideoLoop = (loopVal === '1');
+		} catch (ignore) {}
 		try {
 			if (window.PichomeCache && pichomeCacheIdentity) {
 				var pichomeCachedMediaUrl = window.PichomeCache.getCachedMediaUrl(
@@ -98,6 +112,7 @@
           height: 50,
 		  preloadNext: false,
 		  autoplay: true,
+		  loop: pichomeIsVideoLoop,
       });
 	  player.crossOrigin = "anonymous";
 	  var an=player.analyze(document.querySelector('canvas'))
@@ -125,6 +140,7 @@
           playsinline: true,
           "videoInit": true,
           "autoplay": true,
+          "loop": pichomeIsVideoLoop,
       });
       try { if (player.play) player.play(); } catch (e) {}
 	  </script>
@@ -138,6 +154,7 @@
           height: '100%',
           width: '100%',
 		   "videoInit": true,
+		   "loop": pichomeIsVideoLoop,
       });
       try { if (player.play) player.play(); } catch (e) {}
     </script>
@@ -152,6 +169,7 @@
           width: '100%',
 		   "videoInit": true,
 		   "autoplay": true,
+		   "loop": pichomeIsVideoLoop,
       });
       try { if (player.play) player.play(); } catch (e) {}
     </script>
@@ -179,6 +197,7 @@
 		"fluid": true,
 		"videoInit": true,
 		"autoplay": true,
+		"loop": pichomeIsVideoLoop,
       });
       try {
           var playPromise = player.play();
@@ -194,5 +213,26 @@
       } catch (e) {}
    </script>
 	  <!--{/if}-->
+	  <script type="text/javascript">
+		try {
+			if (typeof player !== 'undefined' && player && typeof player.on === 'function') {
+				player.on('ended', function() {
+					var shouldLoop = false;
+					try {
+						var val = (window.parent && window.parent.localStorage && window.parent.localStorage.getItem('pichome_video_loop')) ||
+						          (window.top && window.top.localStorage && window.top.localStorage.getItem('pichome_video_loop')) ||
+						          (window.localStorage && window.localStorage.getItem('pichome_video_loop'));
+						shouldLoop = (val === '1');
+					} catch (e) {}
+					if (shouldLoop) {
+						try {
+							player.currentTime = 0;
+							player.play();
+						} catch (e) {}
+					}
+				});
+			}
+		} catch (e) {}
+	  </script>
   </body>
 </html>
