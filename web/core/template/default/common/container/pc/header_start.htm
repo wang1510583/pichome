@@ -14,6 +14,13 @@
 		<meta http-equiv="MSThemeCompatible" content="Yes" />
 		<meta name="renderer" content="webkit">
 		<base href="{$_G['siteurl']}" />
+		<link rel="manifest" href="manifest.json">
+		<link rel="apple-touch-icon" href="static/image/apple-touch-icon.png">
+		<meta name="theme-color" content="#409EFF">
+		<meta name="mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="default">
+		<meta name="apple-mobile-web-app-title" content="Pichome">
 		
 		<link rel="stylesheet" href="static/element/Element-Plus/ElementPlus.css?{VERHASH}">
 		<link rel="stylesheet" href="static/scss/common.css?{VERHASH}">
@@ -56,6 +63,13 @@
 				}
 				return response
 			});
+			if ('serviceWorker' in navigator) {
+				window.addEventListener('load', function() {
+					navigator.serviceWorker.register('sw.js').catch(function(err) {
+						console.warn('PWA serviceWorker error:', err);
+					});
+				});
+			}
 		</script>
 
 
