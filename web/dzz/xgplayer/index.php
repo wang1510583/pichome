@@ -124,11 +124,16 @@ if($_GET['operation']=='progress'){
 
     }else{
         if(!$resourcesdata['iswebsitefile'] && $resourcesdata['bz'] == 'dzz::'){
-            $src  = getglobal('siteurl') . 'index.php?mod=io&op=getStream&path=' . dzzencode($rid, '', 0, 0);
+            require_once DZZ_ROOT . './dzz/io/mediaCache.php';
+            $src = pichome_media_stable_url($resourcesdata, 'getStream', 'original');
         }else{
             $src=IO::getFileUri($resourcesdata['path']);
         }
 
+    }
+
+    if (!empty($resourcesdata['rid']) && strpos($src, 'index.php?mod=io&op=getStream') !== false && strpos($src, 'pichome_rid=') === false) {
+        $src .= '&pichome_rid=' . rawurlencode($resourcesdata['rid']);
     }
 
 
@@ -142,5 +147,18 @@ if($_GET['operation']=='progress'){
         $_GET['ext'] = strtolower($filedirextensionarr[0]);
     }
 }
+
+$pichomeCacheRid = !empty($resourcesdata['rid'])
+    ? (string)$resourcesdata['rid']
+    : (!empty($_GET['pichome_rid']) ? (string)$_GET['pichome_rid'] : '');
+if (strlen($pichomeCacheRid) > 256) $pichomeCacheRid = '';
+$pichomePlayerSourceJson = json_encode(
+    (string)$src,
+    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+);
+$pichomeCacheIdentityJson = json_encode(
+    $pichomeCacheRid !== '' ? 'rid:' . $pichomeCacheRid . ':video' : '',
+    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+);
 
 include template('main');

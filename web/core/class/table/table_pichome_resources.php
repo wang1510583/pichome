@@ -2,6 +2,7 @@
 if (!defined('IN_OAOOA')) {
     exit('Access Denied');
 }
+require_once DZZ_ROOT . './dzz/io/mediaCache.php';
 
 class table_pichome_resources extends dzz_table
 {
@@ -203,6 +204,9 @@ class table_pichome_resources extends dzz_table
 
         $datas = $tmpdatas = [];
         foreach (parent::fetch_all($rids) as $v) {
+            // Keep the raw timestamp for stable media versions after mtime is formatted for UI.
+            $v['_media_mtime'] = $v['mtime'];
+            $mediaStreamUrl = pichome_media_stable_url($v, 'getStream', 'original');
             $v['fsize'] = formatsize($v['size']);
             $v['mtime'] = dgmdate(round($v['mtime'] / 1000), 'Y/m/d H:i');
             $v['dateline'] = dgmdate(round($v['dateline'] / 1000), 'Y/m/d H:i');
@@ -217,7 +221,7 @@ class table_pichome_resources extends dzz_table
             $v['opentype'] = getTypeByExt($v['ext']);
             if ($v['opentype'] == 'audio' || $v['opentype'] == 'video') {
                 if(in_array($v['ext'],explode(',',getglobal('config/pichomeplayermediaext')))){
-                    $v['mediaplayerpath'] = getglobal('siteurl') . 'index.php?mod=io&op=getStream&hash=' . VERHASH . '&path=' . $v['dpath'];
+                    $v['mediaplayerpath'] = $mediaStreamUrl;
                 }else{
                     if($ppath = DB::result_first("select path from %t where rid = %s and status = %d",array('video_record',$v['rid'],2))){
                         $v['mediaplayerpath'] = IO::getFileUri($ppath);
@@ -388,6 +392,8 @@ class table_pichome_resources extends dzz_table
     {
 
         $imgdata = [];
+        $stableSmallUrl = pichome_media_stable_url($resourcesdata, 'getImg', 'small');
+        $stableLargeUrl = pichome_media_stable_url($resourcesdata, 'getImg', 'large');
         $patharr = explode(':', $apppath);
         $did = is_numeric($patharr[1]) ? $patharr[1] : 1;
         //库路径
@@ -426,7 +432,7 @@ class table_pichome_resources extends dzz_table
                     if(isset($resourcesdata['isFilelistThumb']) && $resourcesdata['isFilelistThumb']){
                         $smallthumbparams = ['rid' => $resourcesdata['rid'], 'hash' => VERHASH, 'download' => $download,
                             'thumbsign' => '0', 'path'=>$resourcesdata['path'],'ext' => $resourcesdata['ext'], 'appid' => $resourcesdata['appid'],'hasthumb'=>$resourcesdata['hasthumb']];
-                        $imgdata['iconimg'] = getglobal('siteurl') . 'index.php?mod=io&op=getImg&path=' . Pencode($smallthumbparams, 0, '') . '&' . VERHASH;
+                        $imgdata['iconimg'] = $stableSmallUrl;
                         $imgdata['originalimg'] =  (!$return) ? false: getglobal('siteurl') . 'index.php?mod=io&op=createThumb&path='.$resourcesdata['dpath'].'&size=large';
                     }else{
 
@@ -444,8 +450,8 @@ class table_pichome_resources extends dzz_table
 
             } else {
 
-                $imgdata['icondata'] = getglobal('siteurl') . 'index.php?mod=io&op=getImg&path=' . Pencode($smallthumbparams, 0, '') . '&' . VERHASH;
-                $imgdata['originalimg'] = getglobal('siteurl') . 'index.php?mod=io&op=getImg&path=' . Pencode($largethumbparams, 0, '') . '&' . VERHASH;
+                $imgdata['icondata'] = $stableSmallUrl;
+                $imgdata['originalimg'] = $stableLargeUrl;
             }
         }
         else {
@@ -514,7 +520,7 @@ class table_pichome_resources extends dzz_table
                         if(isset($resourcesdata['isFilelistThumb']) && $resourcesdata['isFilelistThumb']){
                             $smallthumbparams = ['rid' => $resourcesdata['rid'], 'hash' => VERHASH, 'download' => $download,
                                 'thumbsign' => '0', 'path'=>$resourcesdata['path'],'ext' => $resourcesdata['ext'], 'appid' => $resourcesdata['appid'],'hasthumb'=>$resourcesdata['hasthumb']];
-                            $imgdata['iconimg'] = getglobal('siteurl') . 'index.php?mod=io&op=getImg&path=' . Pencode($smallthumbparams, 0, '') . '&' . VERHASH;
+                            $imgdata['iconimg'] = $stableSmallUrl;
                             $imgdata['originalimg'] =  (!$return) ? false: getglobal('siteurl') . 'index.php?mod=io&op=createThumb&path='.$resourcesdata['dpath'].'&size=large';
                         }else{
                             $thumbdata = C::t('thumb_record')->fetch($resourcesdata['rid']);
@@ -639,7 +645,7 @@ class table_pichome_resources extends dzz_table
             $resourcesdata['iconwidth'] = $thumsizearr[0];
             $resourcesdata['iconheight'] = $thumsizearr[1];
 
-            if (getglobal('adminid') == 1) $resourcesdata['realfianllypath'] = getglobal('siteurl') . 'index.php?mod=io&op=getStream' . '&path=' . Pencode(array('path' => $rid, 'perm' => $perm, 'ishare' => 0, 'isadmin' => 1), 0);;
+            if (getglobal('adminid') == 1) $resourcesdata['realfianllypath'] = pichome_media_stable_url($resourcesdata, 'getStream', 'original');
             if (in_array($resourcesdata['ext'], ['jpg', 'png', 'gif', 'webp', 'jpeg'])) $resourcesdata['showoriginal'] = 1;
             else $resourcesdata['showoriginal'] = 0;
             //$resourcesdata['name'] = str_replace(strrchr($resourcesdata['name'], "."), "", $resourcesdata['name']);
@@ -654,7 +660,7 @@ class table_pichome_resources extends dzz_table
             $src = $this->getOpensrc($resourcesdata['ext'], $resourcesdata['bz']);
             unset($resourcesdata['path']);
             $random = rand();
-            $resourcesdata['iniframe'] = ($src) ? $src . '&random=' . $random . '&hash=' . VERHASH . '&path=' . $resourcesdata['dpath'] : '';
+            $resourcesdata['iniframe'] = ($src) ? $src . '&random=' . $random . '&hash=' . VERHASH . '&path=' . $resourcesdata['dpath'] . '&pichome_rid=' . rawurlencode($resourcesdata['rid']) : '';
             $this->store_cache($cachekey, $resourcesdata, 60*5);
         }
         Hook::listen('ResourceDataFilter',$resourcesdata);
@@ -736,7 +742,7 @@ class table_pichome_resources extends dzz_table
             $v['opentype'] = getTypeByExt($v['ext']);
             if ($v['opentype'] == 'audio' || $v['opentype'] == 'video') {
                 if(in_array($v['ext'],explode(',',getglobal('config/pichomeplayermediaext')))){
-                    $v['mediaplayerpath'] = getglobal('siteurl') . 'index.php?mod=io&op=getStream&hash=' . VERHASH . '&path=' . $v['dpath'];
+                    // fetch_by_rids already generated this URL from the raw media timestamp.
                 }else{
                     if($ppath = DB::result_first("select path from %t where rid = %s and status = %d",array('video_record',$v['rid'],2))){
                         $v['mediaplayerpath'] = IO::getFileUri($ppath);
@@ -748,7 +754,7 @@ class table_pichome_resources extends dzz_table
             }
             $src = $this->getOpensrc($v['ext'], $v['bz']);
 
-            $v['iniframe'] = ($src) ? $src . '&hash=' . VERHASH . '&path=' . $v['dpath'] : '';
+            $v['iniframe'] = ($src) ? $src . '&hash=' . VERHASH . '&path=' . $v['dpath'] . '&pichome_rid=' . rawurlencode($v['rid']) : '';
 
             if ($imagedatas[$v['rid']]['imgstatus']) {
                 $imgdata = [

@@ -10,14 +10,27 @@ if (!defined('IN_OAOOA')) {
     exit('Access Denied');
 }
 global $_G;
-$path = isset($_GET['path']) ? trim($_GET['path']):'';
-if(!$path = Decode($path,'read')){
-    @header( 'HTTP/1.1 403 Not Found' );
-    @header( 'Status: 403 Not Found' );
-    exit('File not found');
+require_once __DIR__ . '/mediaCache.php';
+$stableRid = isset($_GET['rid']) ? pichome_media_normalize_rid($_GET['rid']) : '';
+$resourcesdata = false;
+if ($stableRid !== '') {
+    $resourcesdata = pichome_media_fetch_authorized_resource($stableRid);
+    if (!$resourcesdata) {
+        @header('HTTP/1.1 403 Forbidden');
+        @header('Status: 403 Forbidden');
+        exit('No Permission');
+    }
+    $path = $stableRid;
+} else {
+    $path = isset($_GET['path']) ? trim($_GET['path']):'';
+    if(!$path = Decode($path,'read')){
+        @header( 'HTTP/1.1 403 Not Found' );
+        @header( 'Status: 403 Not Found' );
+        exit('File not found');
+    }
+    //兼容老版本
+    $path=str_replace('_3','',$path);
 }
-//兼容老版本
-$path=str_replace('_3','',$path);
 
 $rid = $path;
 
@@ -25,7 +38,9 @@ $rid = $path;
 $ulevel = intval(getglobal('pichomelevel') );
 //是否获取真实文件地址
 
-if(strpos($path, 'attach::') === 0){
+if($resourcesdata){
+    // Stable RID request has already fetched and authorized this resource.
+} elseif(strpos($path, 'attach::') === 0){
     $thumbpath = $path;
     $resourcesdata = IO::getMeta($path);
 }else {
@@ -62,56 +77,57 @@ $mime = dzz_mime::get_type($ext);
 if (is_file($url)) {
     $name = $filename;
     $total = filesize($url);
-
-    header("Cache-Control: private, max-age=2592000, pre-check=2592000");
-    header("Pragma: private");
-    header("Expires: " . date(DATE_RFC822, strtotime(" 30 day")));
     $lastModified = @filemtime($url);
-    if ($lastModified) {
-        header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastModified) . ' GMT');
+    if (!$lastModified) {
+        $lastModified = time();
+    }
+    $etag = pichome_media_cache_etag($url, $total, $lastModified);
+    pichome_media_send_cache_headers($etag, $lastModified);
+
+    $hasRange = isset($_SERVER['HTTP_RANGE'])
+        && pichome_media_cache_if_range_matches($etag, $lastModified);
+    if (!$hasRange && pichome_media_cache_is_not_modified($etag, $lastModified)) {
+        header('HTTP/1.1 304 Not Modified');
+        exit();
     }
 
-    if (isset($_SERVER['HTTP_RANGE'])) {
+    if ($hasRange) {
         $rangeHeader = trim($_SERVER['HTTP_RANGE']);
-        if (preg_match('/bytes=(\d*)-(\d*)/i', $rangeHeader, $matches)) {
-            $reqStart = ($matches[1] === '') ? null : intval($matches[1]);
-            $reqEnd   = ($matches[2] === '') ? null : intval($matches[2]);
-
-            $start = ($reqStart === null) ? 0 : $reqStart;
-            $end   = ($reqEnd === null) ? ($total - 1) : $reqEnd;
-
-            if ($start >= $total) {
-                header('HTTP/1.1 416 Requested Range Not Satisfiable');
-                header('Content-Range: bytes */' . $total);
-                exit();
-            }
-            if ($end >= $total) $end = $total - 1;
-            if ($end < $start) $end = $start;
-
-            $size = $end - $start + 1;
-            header('HTTP/1.1 206 Partial Content');
-            header('Accept-Ranges: bytes');
-            header('Content-Length:' . $size);
-            header('Content-Range: bytes ' . $start . '-' . $end . '/' . $total);
-            header('Content-Type:' . $mime);
-
-            $fp = fopen($url, 'rb');
-            if ($fp === false) {
-                exit('Cannot open file');
-            }
-            fseek($fp, $start, 0);
-            $cur = $start;
-            @ob_end_clean();
-            if (getglobal('gzipcompress')) @ob_start('ob_gzhandler');
-            while (!feof($fp) && $cur <= $end && (connection_status() == 0)) {
-                print fread($fp, min(1024 * 16, ($end - $cur) + 1));
-                $cur += 1024 * 16;
-                @ob_flush();
-                @flush();
-            }
-            fclose($fp);
+        $range = pichome_media_parse_range($rangeHeader, $total);
+        if ($range === false) {
+            header('HTTP/1.1 416 Requested Range Not Satisfiable');
+            header('Content-Range: bytes */' . $total);
             exit();
         }
+
+        list($start, $end) = $range;
+
+        $size = $end - $start + 1;
+        header('HTTP/1.1 206 Partial Content');
+        header('Accept-Ranges: bytes');
+        header('Content-Length:' . $size);
+        header('Content-Range: bytes ' . $start . '-' . $end . '/' . $total);
+        header('Content-Type:' . $mime);
+
+        if (isset($_SERVER['REQUEST_METHOD']) && strtoupper($_SERVER['REQUEST_METHOD']) === 'HEAD') {
+            exit();
+        }
+
+        $fp = fopen($url, 'rb');
+        if ($fp === false) {
+            exit('Cannot open file');
+        }
+        fseek($fp, $start, 0);
+        $cur = $start;
+        @ob_end_clean();
+        while (!feof($fp) && $cur <= $end && (connection_status() == 0)) {
+            print fread($fp, min(1024 * 16, ($end - $cur) + 1));
+            $cur += 1024 * 16;
+            @ob_flush();
+            @flush();
+        }
+        fclose($fp);
+        exit();
     }
 
     // ============ 非 Range 请求(完整下载) ============
@@ -120,11 +136,14 @@ if (is_file($url)) {
     header('Content-Length:' . $total);
     header('Content-Type:' . $mime);
 
+    if (isset($_SERVER['REQUEST_METHOD']) && strtoupper($_SERVER['REQUEST_METHOD']) === 'HEAD') {
+        exit();
+    }
+
     $fp = fopen($url, 'rb');
     if ($fp !== false) {
         $cur = 0;
         @ob_end_clean();
-        if (getglobal('gzipcompress')) @ob_start('ob_gzhandler');
         while (!feof($fp) && $cur < $total && (connection_status() == 0)) {
             print fread($fp, min(1024 * 16, $total - $cur));
             $cur += 1024 * 16;

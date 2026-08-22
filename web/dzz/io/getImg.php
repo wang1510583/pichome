@@ -10,13 +10,32 @@ if (!defined('IN_OAOOA')) {
     exit('Access Denied');
 }
 global $_G;
+require_once __DIR__ . '/mediaCache.php';
 
-$path = isset($_GET['path']) ? trim($_GET['path']) : '';
-
-if (!$patharr = Pdecode($path,  '')) {
-    @header('HTTP/1.1 404 Not Found');
-    @header('Status: 404 Not Found');
-    exit('404 Not Found');
+$stableRid = isset($_GET['rid']) ? pichome_media_normalize_rid($_GET['rid']) : '';
+if ($stableRid !== '') {
+    $resource = pichome_media_fetch_authorized_resource($stableRid);
+    if (!$resource) {
+        @header('HTTP/1.1 403 Forbidden');
+        @header('Status: 403 Forbidden');
+        exit('No Permission');
+    }
+    $attr = C::t('pichome_resources_attr')->fetch($stableRid);
+    $patharr = array(
+        'appid' => $resource['appid'],
+        'rid' => $stableRid,
+        'path' => isset($attr['path']) ? $attr['path'] : '',
+        'ext' => $resource['ext'],
+        'hasthumb' => !empty($resource['hasthumb']) ? 1 : 0,
+        'thumbsign' => (isset($_GET['variant']) && $_GET['variant'] === 'large') ? 1 : 0,
+    );
+} else {
+    $path = isset($_GET['path']) ? trim($_GET['path']) : '';
+    if (!$patharr = Pdecode($path,  '')) {
+        @header('HTTP/1.1 404 Not Found');
+        @header('Status: 404 Not Found');
+        exit('404 Not Found');
+    }
 }
 
 $appid = $patharr['appid'];
@@ -168,19 +187,28 @@ if (is_file($url)) {
     $filename = $url;
     $start = 0;
     $total = filesize($filename);
-    header("Cache-Control: private, max-age=2592000, pre-check=2592000");
-    header("Pragma: private");
-    header("Expires: " . date(DATE_RFC822, strtotime(" 30 day")));
-    header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($filename)) . ' GMT');
-    if (isset($_SERVER['HTTP_RANGE'])) {
-        $range = str_replace('=', '-', $_SERVER['HTTP_RANGE']);
-        $range = explode('-', $range);
-        if (isset($range[2]) && intval($range[2]) > 0) {
-            $end = trim($range[2]);
-        } else {
-            $end = $total - 1;
+    $lastModified = @filemtime($filename);
+    if (!$lastModified) {
+        $lastModified = time();
+    }
+    $etag = pichome_media_cache_etag($filename, $total, $lastModified);
+    pichome_media_send_cache_headers($etag, $lastModified);
+
+    $hasRange = isset($_SERVER['HTTP_RANGE'])
+        && pichome_media_cache_if_range_matches($etag, $lastModified);
+    if (!$hasRange && pichome_media_cache_is_not_modified($etag, $lastModified)) {
+        header('HTTP/1.1 304 Not Modified');
+        exit();
+    }
+
+    if ($hasRange) {
+        $range = pichome_media_parse_range($_SERVER['HTTP_RANGE'], $total);
+        if ($range === false) {
+            header('HTTP/1.1 416 Requested Range Not Satisfiable');
+            header('Content-Range: bytes */' . $total);
+            exit();
         }
-        $start = trim($range[1]);
+        list($start, $end) = $range;
         $size = $end - $start + 1;
 
         header('HTTP/1.1 206 Partial Content');
@@ -188,20 +216,24 @@ if (is_file($url)) {
         header('Content-Range: bytes ' . $start . '-' . $end . '/' . $total);
 
     } else {
-        $size = $end = $total;
+        $size = $total;
+        $end = $total - 1;
 
         header('HTTP/1.1 200 OK');
         header('Content-Length:' . $size);
-        header('Content-Range: bytes 0-' . ($total - 1) . '/' . $total);
     }
-    header('Accenpt-Ranges: bytes');
+    header('Accept-Ranges: bytes');
     header('Content-Type:' . $mime);
+
+    if (isset($_SERVER['REQUEST_METHOD']) && strtoupper($_SERVER['REQUEST_METHOD']) === 'HEAD') {
+        exit();
+    }
+
     $fp = fopen($filename, 'rb');
     fseek($fp, $start, 0);
 
     $cur = $start;
     @ob_end_clean();
-    if (getglobal('gzipcompress')) @ob_start('ob_gzhandler');
     while (!feof($fp) && $cur <= $end && (connection_status() == 0)) {
         print fread($fp, min(1024 * 16, ($end - $cur) + 1));
         $cur += 1024 * 16;
@@ -228,5 +260,3 @@ if (is_file($url)) {
     @ob_flush();
     exit();
 }
-
-

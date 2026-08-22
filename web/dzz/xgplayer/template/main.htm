@@ -61,6 +61,25 @@
 		  </div>
 		  <!--{/if}-->
 		  <div id="mse"></div>
+
+	<script type="text/javascript">
+		var pichomeOriginalMediaUrl = $pichomePlayerSourceJson;
+		var pichomeCacheIdentity = $pichomeCacheIdentityJson;
+		var pichomePlayerMediaUrl = pichomeOriginalMediaUrl;
+		try {
+			if (window.PichomeCache && pichomeCacheIdentity) {
+				var pichomeCachedMediaUrl = window.PichomeCache.getCachedMediaUrl(
+					pichomeOriginalMediaUrl,
+					pichomeCacheIdentity
+				) || '';
+				if (pichomeCachedMediaUrl) {
+					pichomePlayerMediaUrl = pichomeCachedMediaUrl;
+				} else {
+					window.PichomeCache.cacheMedia(pichomeOriginalMediaUrl, pichomeCacheIdentity);
+				}
+			}
+		} catch (ignore) {}
+	</script>
   
 	
 	<!--{if $_GET['ext']=='mp3' || $_GET['ext']=='ogg' || $_GET['ext']=='wav' }-->
@@ -73,7 +92,7 @@
 		 });
       let player = new window.Music({
           id: 'mse',
-          url: [{src: "$src", name: '$data['name']', poster: '{$_G['siteurl']}dzz/images/b.gif',vid:'1'}],
+          url: [{src: pichomePlayerMediaUrl, name: '$data['name']', poster: '{$_G['siteurl']}dzz/images/b.gif',vid:'1'}],
           volume: 0.8,
           width: '100%',
           height: 50,
@@ -100,7 +119,7 @@
 	   <script type="text/javascript">
 		  var player = new FlvPlayer({
           id: 'mse',
-          url: "$src",
+          url: pichomePlayerMediaUrl,
           playsinline: true,
           "videoInit": true,
       });
@@ -109,7 +128,7 @@
 	 <script type="text/javascript">
       let player = new HlsPlayer({
           id: 'mse',
-          url:"$src",
+          url:pichomePlayerMediaUrl,
           autoplay: false,
           playsinline: true,
           height: '100%',
@@ -121,7 +140,7 @@
 	   <script type="text/javascript">
       new window.ShakaJsPlayer({
         id: 'mse',
-        url: "$src",
+        url: pichomePlayerMediaUrl,
         ignores: ['error'],
         playsinline: true,
         height: '100%',
@@ -134,7 +153,7 @@
 	  
       var player = new Player({
 		"id": "mse",
-		"url": "$src",
+		"url": pichomePlayerMediaUrl,
 		"playsinline": true,
 		"whitelist": [
 				""

@@ -1,12 +1,14 @@
 package top.lempet.pichome;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,12 +16,14 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.SafeBrowsingResponse;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -28,12 +32,14 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import java.util.Arrays;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final String HOME_URL = "https://pichome.lempet.top:5575/";
     private static final String APP_ACCESS_TAG = BuildConfig.PICHOME_APP_ACCESS_TAG;
     private static final int FILE_CHOOSER_REQUEST = 1201;
     private static final int SYSTEM_BAR_COLOR = Color.rgb(48, 49, 53);
+    private static final String PICHOME_HOST = "pichome.lempet.top";
 
     private FrameLayout root;
     private WebView webView;
@@ -44,6 +50,9 @@ public class MainActivity extends Activity {
     private View fullscreenView;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private Object backInvokedCallback;
+    private MediaDiskCache mediaDiskCache;
+    private AlertDialog cacheDialog;
+    private String appUserAgent = "PichomeAndroid";
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -236,6 +245,7 @@ public class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(true);
         settings.setBuiltInZoomControls(false);
@@ -244,8 +254,11 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        String appUserAgent = settings.getUserAgentString() + " PichomeAndroid/1.0";
+        // Cached media is served by an app-private loopback server. No remote HTTP content is
+        // introduced; allowing mixed content here lets the HTTPS page play 127.0.0.1 media.
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        appUserAgent = settings.getUserAgentString()
+                + " PichomeAndroid/" + BuildConfig.VERSION_NAME;
         if (!APP_ACCESS_TAG.isEmpty()) {
             appUserAgent += " " + APP_ACCESS_TAG;
         }
@@ -255,6 +268,15 @@ public class MainActivity extends Activity {
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, true);
 
+        try {
+            mediaDiskCache = new MediaDiskCache(getApplicationContext(), PICHOME_HOST);
+        } catch (Throwable error) {
+            Log.e("PichomeCache", "Cache initialization failed; using WebView cache only", error);
+            mediaDiskCache = null;
+        }
+        // Keep the settings entry available even if cache initialization must degrade gracefully.
+        webView.addJavascriptInterface(new CacheJavascriptBridge(), "PichomeCache");
+
         webView.setWebViewClient(new PichomeWebViewClient());
         webView.setWebChromeClient(new PichomeWebChromeClient());
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) ->
@@ -263,6 +285,22 @@ public class MainActivity extends Activity {
     }
 
     private final class PichomeWebViewClient extends WebViewClient {
+        @Override
+        public WebResourceResponse shouldInterceptRequest(
+                WebView view,
+                WebResourceRequest request
+        ) {
+            try {
+                WebResourceResponse cached = mediaDiskCache == null
+                        ? null
+                        : mediaDiskCache.intercept(request, view.getSettings().getUserAgentString());
+                return cached != null ? cached : super.shouldInterceptRequest(view, request);
+            } catch (Throwable error) {
+                Log.e("PichomeCache", "Cache request failed; falling back to WebView", error);
+                return super.shouldInterceptRequest(view, request);
+            }
+        }
+
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             Uri uri = request.getUrl();
@@ -285,6 +323,8 @@ public class MainActivity extends Activity {
             super.onPageFinished(view, url);
             progressBar.setVisibility(View.GONE);
             injectAppCustomizations(view);
+            view.postDelayed(() -> injectAppCustomizations(view), 800);
+            view.postDelayed(() -> injectAppCustomizations(view), 2_000);
         }
 
         @Override
@@ -421,18 +461,31 @@ public class MainActivity extends Activity {
                 + "html.pichome-frame-stepping-doc video::-webkit-media-controls,html.pichome-frame-stepping-doc video::-webkit-media-controls-enclosure{display:none!important;visibility:hidden!important;opacity:0!important;}"
                 + "@media(max-width:768px){html.pichome-android-app .mobile-sidebar-toggle{display:none!important;}}"
                 + "';"
+                + "function nativeMediaUrlIdentity(raw,doc){try{var parsed=new URL(raw,doc&&doc.baseURI||location.href),rid=parsed.searchParams.get('pichome_rid');if(rid&&rid.length<=256)return 'rid:'+rid+':video';}catch(ignore){}return '';}"
+                + "function nativeMediaIdentity(media,doc){try{var rid=media.getAttribute&&media.getAttribute('data-rid'),owner=!rid&&media.closest&&media.closest('[data-rid]');if(!rid&&owner)rid=owner.getAttribute('data-rid');if(!rid&&media.tagName==='IMG'){var max=media.parentElement&&media.parentElement.querySelector('.image-viewer__img.max[data-rid]');rid=max&&max.getAttribute('data-rid');}if(rid)return 'rid:'+rid+':'+media.tagName.toLowerCase();var actual=media.currentSrc||media.getAttribute&&media.getAttribute('src')||'';var urlIdentity=nativeMediaUrlIdentity(actual,doc);if(urlIdentity)return urlIdentity;var win=doc&&doc.defaultView;while(win&&win.frameElement){var frame=win.frameElement,ownerWin=frame.ownerDocument&&frame.ownerDocument.defaultView,detailFrame=ownerWin&&ownerWin.frameElement;try{if(detailFrame){var vm=detailVm(detailFrame),data=vm&&vm.showdata&&vm.showdata[vm.showdataindex]&&vm.showdata[vm.showdataindex].data;if(data&&data.rid)return 'rid:'+data.rid+':video';}}catch(ignore){}var raw=frame.getAttribute('src')||frame.src||'';try{var parsed=new URL(raw,frame.ownerDocument.baseURI),stableRid=parsed.searchParams.get('pichome_rid'),mod=parsed.searchParams.get('mod'),path=parsed.searchParams.get('path');if(stableRid)return 'rid:'+stableRid+':video';if(mod==='xgplayer'&&path)return 'xgplayer:'+path;}catch(ignore){}win=ownerWin;}return '';}catch(ignore){return '';}}"
+                + "function installMediaSourceInterceptor(doc){try{var win=doc&&doc.defaultView,bridge=win&&win.PichomeCache||window.PichomeCache,proto=win&&win.HTMLMediaElement&&win.HTMLMediaElement.prototype;if(!bridge||!proto||win.__pichomeMediaSourceInterceptor)return;var descriptor=Object.getOwnPropertyDescriptor(proto,'src');if(!descriptor||!descriptor.get||!descriptor.set||descriptor.configurable===false)return;Object.defineProperty(proto,'src',{configurable:descriptor.configurable,enumerable:descriptor.enumerable,get:descriptor.get,set:function(value){var raw=value==null?'':String(value),original='';try{original=new URL(raw,doc.baseURI).href;}catch(ignore){original=raw;}if(!original||original.indexOf('http://127.0.0.1:')===0||original.indexOf('https://pichome.lempet.top:5575/')!==0)return descriptor.set.call(this,value);var identity=nativeMediaUrlIdentity(original,doc);if(!identity)return descriptor.set.call(this,value);var requestKey=identity+'|'+original,local='';this.dataset.pichomeOriginalMediaUrl=original;try{local=bridge.getCachedMediaUrl(original,identity)||'';}catch(ignore){}if(local){this.dataset.pichomeUsingLocalCache='1';this.dataset.pichomeCacheReady='1';return descriptor.set.call(this,local);}descriptor.set.call(this,value);if(this.dataset.pichomeCacheRequested!==requestKey){this.dataset.pichomeCacheRequested=requestKey;try{bridge.cacheMedia(original,identity);}catch(ignore){}}}});win.__pichomeMediaSourceInterceptor=true;}catch(ignore){}}"
+                + "function installNativeMediaCache(doc){try{"
+                + "if(!doc||!doc.querySelectorAll||!isCurrentDetailDocument(doc))return;var win=doc.defaultView,bridge=win&&win.PichomeCache||window.PichomeCache;if(!bridge)return;"
+                + "doc.querySelectorAll('video,.detail-popup-content.center .image-viewer__img.max,.detail-popup .image-viewer__img.max').forEach(function(media){try{"
+                + "var actual='';if(media.tagName==='VIDEO'){actual=media.currentSrc||media.getAttribute('src')||'';if(!actual){var source=media.querySelector('source[src]');actual=source&&(source.currentSrc||source.src||source.getAttribute('src'))||'';}}else actual=media.currentSrc||media.src||media.getAttribute('src')||'';"
+                + "var isLocal=actual.indexOf('http://127.0.0.1:')===0,original=media.dataset.pichomeOriginalMediaUrl||'';if(actual&&!isLocal&&actual!==original){try{original=new URL(actual,doc.baseURI).href;}catch(ignore){original=actual;}media.dataset.pichomeOriginalMediaUrl=original;delete media.dataset.pichomeCacheRequested;}"
+                + "if(!original||original.indexOf('https://pichome.lempet.top:5575/')!==0)return;var identity=nativeMediaIdentity(media,doc),requestKey=identity+'|'+original,local='';try{local=bridge.getCachedMediaUrl(original,identity)||'';}catch(ignore){}"
+                + "if(local){if(actual===local)return;if(media.dataset.pichomeCacheRequested===requestKey){media.dataset.pichomeCacheReady='1';return;}media.dataset.pichomeUsingLocalCache='1';if(media.tagName==='VIDEO'){media.src=local;media.load();}else media.src=local;return;}"
+                + "if(media.dataset.pichomeCacheRequested!==requestKey){media.dataset.pichomeCacheRequested=requestKey;try{bridge.cacheMedia(original,identity);}catch(ignore){}}"
+                + "}catch(ignore){}});"
+                + "}catch(ignore){}}"
                 + "function installMediaCss(doc){"
-                + "if(!doc)return;tryAutoplay(doc);if(doc.getElementById('pichome-android-media-css'))return;"
+                + "if(!doc)return;installMediaSourceInterceptor(doc);tryAutoplay(doc);installNativeMediaCache(doc);if(doc.getElementById('pichome-android-media-css'))return;"
                 + "var style=doc.createElement('style');style.id='pichome-android-media-css';style.textContent=mediaCss;"
                 + "(doc.head||doc.documentElement).appendChild(style);"
                 + "try{var win=doc.defaultView;if(win&&doc!==document&&!win.__pichomeAndroidDocObserver){"
-                + "win.__pichomeAndroidDocObserver=new win.MutationObserver(function(){tryAutoplay(doc);installFrameCss(doc);hideDownloads(doc);try{fitDetailDialog(win.frameElement);}catch(ignore){}});"
-                + "win.__pichomeAndroidDocObserver.observe(doc.documentElement,{childList:true,subtree:true});}}catch(ignore){}"
+                + "win.__pichomeAndroidDocObserver=new win.MutationObserver(function(records){var structural=records.some(function(record){return record.type==='childList'&&record.addedNodes&&record.addedNodes.length;});if(structural){tryAutoplay(doc);installFrameCss(doc);hideDownloads(doc);try{fitDetailDialog(win.frameElement);}catch(ignore){}}clearTimeout(win.__pichomeAndroidCacheScanTimer);win.__pichomeAndroidCacheScanTimer=setTimeout(function(){installNativeMediaCache(doc);},160);});"
+                + "win.__pichomeAndroidDocObserver.observe(doc.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});}}catch(ignore){}"
                 + "}"
                 + "function installFrameCss(root){"
                 + "var scope=root&&root.querySelectorAll?root:document;"
                 + "scope.querySelectorAll('iframe').forEach(function(frame){"
-                + "lockDetailToFramePath(frame);function apply(){try{lockDetailToFramePath(frame);tryAutoplay(frame.contentDocument);installMediaCss(frame.contentDocument);installFrameCss(frame.contentDocument);hideDownloads(frame.contentDocument);installDetailFrame(frame);}catch(ignore){}}"
+                + "lockDetailToFramePath(frame);function apply(){try{lockDetailToFramePath(frame);tryAutoplay(frame.contentDocument);installNativeMediaCache(frame.contentDocument);installMediaCss(frame.contentDocument);installFrameCss(frame.contentDocument);hideDownloads(frame.contentDocument);installDetailFrame(frame);}catch(ignore){}}"
                 + "if(!frame.dataset.pichomeAndroidAdaptive){frame.dataset.pichomeAndroidAdaptive='1';frame.addEventListener('load',apply);}"
                 + "apply();"
                 + "});"
@@ -511,6 +564,16 @@ public class MainActivity extends Activity {
                 + "}"
                 + "});"
                 + "}"
+                + "function installCacheMenuItem(doc){try{"
+                + "doc=doc||document;var item=doc.getElementById('pichome-android-cache-menu-item');"
+                + "if(!item){var manageLink=doc.querySelector('.el-dropdown-menu a[href*=\"mod=manage\"]');var manageItem=manageLink&&manageLink.closest('li');"
+                + "if(!manageItem)return;item=doc.createElement('li');item.id='pichome-android-cache-menu-item';item.className='el-dropdown-menu__item';"
+                + "item.setAttribute('role','menuitem');item.setAttribute('tabindex','-1');item.textContent='查看缓存';"
+                + "if(manageItem.nextSibling)manageItem.parentNode.insertBefore(item,manageItem.nextSibling);else manageItem.parentNode.appendChild(item);}"
+                + "item.style.setProperty('display','flex','important');if(item.dataset.pichomeAndroidCacheBound==='1')return;"
+                + "item.dataset.pichomeAndroidCacheBound='1';item.addEventListener('click',function(event){event.preventDefault();"
+                + "try{if(window.PichomeCache)window.PichomeCache.openSettings();else alert('缓存服务未初始化，请重启 App');}catch(ignore){alert('无法打开缓存设置，请重启 App');}});"
+                + "}catch(ignore){}}"
                 + "function installExactDetailOpen(){"
                 + "if(window.__pichomeAndroidExactDetailOpen)return;window.__pichomeAndroidExactDetailOpen=true;"
                 + "document.addEventListener('dblclick',function(event){try{var card=event.target&&event.target.closest&&event.target.closest('.image-item[data-rid],.imagtable-content[data-rid]');if(!card)return;var office=window.dzzoffice,source=office&&office.WindowThis&&office.WindowThis.ImageDataParam&&office.WindowThis.ImageDataParam.data;if(!source||!source.length)return;var rid=String(card.getAttribute('data-rid')||''),items=Array.prototype.slice.call(source),index=items.findIndex(function(item){return item&&String(item.rid)===rid;});if(index<0||!items[index]||!items[index].dpath)return;var item=items[index],path=String(item.dpath);event.preventDefault();event.stopImmediatePropagation();sessionStorage.setItem('imgs',path);sessionStorage.setItem('selectindex','0');sessionStorage.setItem('detailpath',path);var old=document.querySelector('.Details-Iframe');if(old)old.remove();var overlay=document.createElement('div');overlay.className='Details-Iframe';var wrapper=document.createElement('div');wrapper.className='Details-Iframe-wrapper';var frame=document.createElement('iframe');frame.style.opacity='0';frame.setAttribute('allow','autoplay; fullscreen');frame.src='index.php?mod=details&opentype=current&isadmin=1#path='+path;overlay.addEventListener('click',function(closeEvent){if(closeEvent.target===overlay)overlay.remove();});wrapper.appendChild(frame);overlay.appendChild(wrapper);document.body.appendChild(overlay);lockDetailToFramePath(frame);installFrameCss(overlay);}catch(ignore){}},true);"
@@ -560,15 +623,163 @@ public class MainActivity extends Activity {
                 + "document.addEventListener('touchend',touchEnd,{passive:true});"
                 + "document.addEventListener('touchcancel',touchCancel,{passive:true});"
                 + "}"
-                + "installMediaCss(document);installFrameCss(document);hideDownloads(document);installExactDetailOpen();installSidebarGestures();"
+                + "function safeInstall(name,fn){try{fn();}catch(error){try{console.error('[PichomeAndroid] '+name,error);}catch(ignore){}}}"
+                + "function installAll(){safeInstall('media',function(){installMediaCss(document);});safeInstall('frames',function(){installFrameCss(document);});safeInstall('downloads',function(){hideDownloads(document);});safeInstall('cache-menu',function(){installCacheMenuItem(document);});safeInstall('detail-open',installExactDetailOpen);safeInstall('sidebars',installSidebarGestures);}"
+                + "installAll();[200,700,1600,3200].forEach(function(delay){setTimeout(installAll,delay);});"
                 + "if(window.__pichomeAndroidDownloadObserver){window.__pichomeAndroidDownloadObserver.disconnect();}"
                 + "window.__pichomeAndroidDownloadObserver=new MutationObserver(function(records){"
                 + "records.forEach(function(record){record.addedNodes.forEach(function(node){"
-                + "if(node.nodeType===1){installFrameCss(node);installFrameCss(node.parentNode);hideDownloads(node);hideDownloads(node.parentNode);}});});"
+                + "if(node.nodeType===1){safeInstall('new-frames',function(){installFrameCss(node);installFrameCss(node.parentNode);});safeInstall('new-downloads',function(){hideDownloads(node);hideDownloads(node.parentNode);});safeInstall('cache-menu',function(){installCacheMenuItem(document);});}});});"
                 + "});"
                 + "window.__pichomeAndroidDownloadObserver.observe(document.documentElement,{childList:true,subtree:true});"
                 + "})();";
         view.evaluateJavascript(script, null);
+    }
+
+    private final class CacheJavascriptBridge {
+        @JavascriptInterface
+        public void cacheMedia(String url, String cacheIdentity) {
+            if (mediaDiskCache == null || url == null) return;
+            try {
+                mediaDiskCache.prefetch(url, cacheIdentity, appUserAgent);
+            } catch (Throwable error) {
+                Log.e("PichomeCache", "Unable to prefetch media", error);
+            }
+        }
+
+        @JavascriptInterface
+        public String getCachedMediaUrl(String url, String cacheIdentity) {
+            if (mediaDiskCache == null || url == null) return "";
+            try {
+                return mediaDiskCache.getLocalUrl(url, cacheIdentity);
+            } catch (Throwable error) {
+                Log.e("PichomeCache", "Unable to resolve cached media", error);
+                return "";
+            }
+        }
+
+        @JavascriptInterface
+        public void openSettings() {
+            if (mediaDiskCache == null) {
+                runOnUiThread(() -> Toast.makeText(
+                        MainActivity.this,
+                        "缓存服务未初始化，请重新启动 App",
+                        Toast.LENGTH_LONG
+                ).show());
+                return;
+            }
+            try {
+                MediaDiskCache.CacheStats stats = mediaDiskCache.getStats();
+                runOnUiThread(() -> showCacheSettingsDialog(stats));
+            } catch (Throwable error) {
+                Log.e("PichomeCache", "Unable to open cache settings", error);
+                runOnUiThread(() -> Toast.makeText(
+                        MainActivity.this,
+                        "缓存设置暂时不可用，请重新启动 App",
+                        Toast.LENGTH_LONG
+                ).show());
+            }
+        }
+    }
+
+    private void showCacheSettingsDialog(MediaDiskCache.CacheStats stats) {
+        if (isFinishing() || isDestroyed()) return;
+        if (cacheDialog != null) cacheDialog.dismiss();
+        String message = "已缓存：" + formatBytes(stats.totalBytes)
+                + " / " + formatBytes(stats.maxBytes)
+                + "\n缓存素材：" + stats.itemCount + " 个"
+                + (stats.pendingCount > 0
+                ? "\n正在缓存：" + stats.pendingCount + " 个（已下载 "
+                + formatBytes(stats.pendingBytes) + "）"
+                : "")
+                + "\n\n诊断：发现 " + stats.discoveredCount
+                + " / 启动 " + stats.startedCount
+                + " / 完成 " + stats.completedCount
+                + " / 失败 " + stats.failedCount
+                + " / 本地播放 " + stats.localPlaybackCount
+                + "\n最后状态：" + stats.lastDiagnostic
+                + "\n\n图片会在预览时自动缓存；视频首次预览时在后台补全。";
+        cacheDialog = new AlertDialog.Builder(this)
+                .setTitle("素材缓存")
+                .setMessage(message)
+                .setPositiveButton("设置容量", (dialog, which) -> showCacheCapacityDialog(stats.maxBytes))
+                .setNeutralButton("清理缓存", (dialog, which) -> confirmClearCache())
+                .setNegativeButton("关闭", null)
+                .create();
+        cacheDialog.setOnDismissListener(dialog -> cacheDialog = null);
+        cacheDialog.show();
+    }
+
+    private void showCacheCapacityDialog(long currentBytes) {
+        final long gib = 1024L * 1024L * 1024L;
+        final long[] values = {
+                512L * 1024L * 1024L,
+                gib,
+                2L * gib,
+                4L * gib,
+                8L * gib,
+                16L * gib
+        };
+        final String[] labels = {"512 MB", "1 GB", "2 GB", "4 GB", "8 GB", "16 GB"};
+        int selected = 0;
+        for (int index = 0; index < values.length; index++) {
+            if (values[index] == currentBytes) {
+                selected = index;
+                break;
+            }
+        }
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("缓存容量上限")
+                .setSingleChoiceItems(labels, selected, null)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存", null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(view -> {
+                    int position = dialog.getListView().getCheckedItemPosition();
+                    if (position < 0 || position >= values.length || mediaDiskCache == null) return;
+                    long selectedBytes = values[position];
+                    dialog.dismiss();
+                    mediaDiskCache.setMaxCacheBytes(selectedBytes, () -> runOnUiThread(() -> {
+                        Toast.makeText(
+                                MainActivity.this,
+                                "缓存容量已设置为 " + formatBytes(selectedBytes),
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }));
+                }));
+        dialog.show();
+    }
+
+    private void confirmClearCache() {
+        new AlertDialog.Builder(this)
+                .setTitle("清理素材缓存？")
+                .setMessage("只删除 App 自动缓存的图片和视频，不会删除服务器素材或登录信息。")
+                .setPositiveButton("清理", (dialog, which) -> {
+                    if (mediaDiskCache == null) return;
+                    mediaDiskCache.clearAll(() -> runOnUiThread(() -> {
+                        if (webView != null) webView.clearCache(true);
+                        Toast.makeText(
+                                MainActivity.this,
+                                "素材缓存已清理",
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }));
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes < 1024L) return bytes + " B";
+        double value = bytes;
+        String[] units = {"B", "KB", "MB", "GB", "TB"};
+        int unit = 0;
+        while (value >= 1024.0 && unit < units.length - 1) {
+            value /= 1024.0;
+            unit++;
+        }
+        return String.format(Locale.CHINA, value >= 100 || unit == 0 ? "%.0f %s" : "%.1f %s", value, units[unit]);
     }
 
     @Override
@@ -666,11 +877,19 @@ public class MainActivity extends Activity {
             pendingFileCallback.onReceiveValue(null);
             pendingFileCallback = null;
         }
+        if (cacheDialog != null) {
+            cacheDialog.dismiss();
+            cacheDialog = null;
+        }
         if (webView != null) {
             webView.stopLoading();
             webView.setWebChromeClient(null);
             webView.setWebViewClient(null);
             webView.destroy();
+        }
+        if (mediaDiskCache != null) {
+            mediaDiskCache.shutdown();
+            mediaDiskCache = null;
         }
         super.onDestroy();
     }

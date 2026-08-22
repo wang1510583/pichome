@@ -47,6 +47,7 @@ const comavatar = {
                     <el-dropdown-menu slot="dropdown" style="width: 165px;">
                         <el-dropdown-item command="personal"><a href="user.php?mod=my" >{{Lang.text2}}</a></el-dropdown-item>
                         <el-dropdown-item command="manage" v-if="adminid==1"><a href="index.php?mod=manage">{{Lang.text3}}</a></el-dropdown-item>
+                        <el-dropdown-item id="pichome-android-cache-menu-item" command="pichomeCache" style="display:none;">查看缓存</el-dropdown-item>
                         <el-divider class="adjust-divider"></el-divider>
 						<el-dropdown-item command="about">{{Lang.text4}}</el-dropdown-item>
                         <el-dropdown-item command="OutLogin">{{Lang.text5}}</el-dropdown-item>
