@@ -47,7 +47,7 @@ const comavatar = {
                     <el-dropdown-menu slot="dropdown" style="width: 165px;">
                         <el-dropdown-item command="personal"><a href="user.php?mod=my" >{{Lang.text2}}</a></el-dropdown-item>
                         <el-dropdown-item command="manage" v-if="adminid==1"><a href="index.php?mod=manage">{{Lang.text3}}</a></el-dropdown-item>
-                        <el-dropdown-item id="pichome-android-cache-menu-item" command="pichomeCache" style="display:none;">查看缓存</el-dropdown-item>
+                        <el-dropdown-item id="pichome-android-cache-menu-item" command="pichomeCache">{{Lang.textCache || '查看缓存'}}</el-dropdown-item>
                         <el-divider class="adjust-divider"></el-divider>
 						<el-dropdown-item command="about">{{Lang.text4}}</el-dropdown-item>
                         <el-dropdown-item command="OutLogin">{{Lang.text5}}</el-dropdown-item>
@@ -58,6 +58,42 @@ const comavatar = {
         <template v-else>
             <el-button type="primary" size="mini" @click="GoLogin">{{Lang.text6}}</el-button>
         </template>
+        <el-dialog
+            v-model="CacheData.visible"
+            title="素材与浏览器缓存"
+            width="460px"
+            @open="CacheOpen">
+            <div class="cacheBox" style="padding:10px 15px;" v-loading="CacheData.loading">
+                <div class="el-form el-form--default el-form--label-left">
+                    <div class="el-form-item" style="margin-bottom: 12px;">
+                        <label class="el-form-item__label" style="width:110px;">已用缓存空间：</label>
+                        <div class="el-form-item__content" style="font-weight: bold; color: #409EFF; line-height: 32px;">
+                            {{CacheData.usageText}}
+                            <span v-if="CacheData.quotaBytes > 0" style="font-weight: normal; color: #909399; font-size: 12px; margin-left: 6px;">
+                                / 上限 {{CacheData.quotaText}}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="el-form-item" style="margin-bottom: 12px;">
+                        <label class="el-form-item__label" style="width:110px;">缓存机制：</label>
+                        <div class="el-form-item__content" style="color: #606266; font-size: 13px; line-height: 32px;">
+                            HTTP 强缓存 (30天) + 协商缓存 (304)
+                        </div>
+                    </div>
+                    <div class="el-form-item" style="margin-bottom: 16px;">
+                        <label class="el-form-item__label" style="width:110px;">加速说明：</label>
+                        <div class="el-form-item__content" style="color: #909399; font-size: 12px; line-height: 1.6;">
+                            图片和视频素材由浏览器本地自动缓存加速；基于素材物理特征版本号，分类与标签调整不重复拉取。
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <el-button size="small" type="danger" plain :loading="CacheData.clearing" @click="ClearWebCache">清理本地缓存</el-button>
+                    <el-button size="small" type="primary" plain @click="ForceReload">强制刷新</el-button>
+                    <el-button size="small" @click="CacheData.visible = false">关闭</el-button>
+                </div>
+            </div>
+        </el-dialog>
         <el-dialog
             v-model="AboutData.visible"
             title=""
@@ -107,11 +143,21 @@ const comavatar = {
                 home:''
             }
         });
+        let CacheData = reactive({
+            visible: false,
+            loading: false,
+            clearing: false,
+            usageBytes: 0,
+            quotaBytes: 0,
+            usageText: '正在计算...',
+            quotaText: '未知'
+        });
         let isuid = ref(props.uid);
         let Lang = {
             text1:__lang.level,
             text2:__lang.userCenter,
             text3:__lang.system_management,
+            textCache:'查看缓存',
             text4:__lang.about,
             text5:__lang.logout,
             text6:__lang.login,
@@ -155,6 +201,17 @@ const comavatar = {
                 break;
                 case 'library':
                     window.location.href = 'index.php?mod=pichome&op=library';
+                break;
+                case 'pichomeCache':
+                    if (window.PichomeCache && typeof window.PichomeCache.openSettings === 'function') {
+                        try {
+                            window.PichomeCache.openSettings();
+                        } catch (err) {
+                            CacheData.visible = true;
+                        }
+                    } else {
+                        CacheData.visible = true;
+                    }
                 break;
                 case 'about':
                     AboutData.visible = true;
@@ -206,14 +263,74 @@ const comavatar = {
             AboutData.data.website = res.data.home_page;
             AboutData.data.home = res.data.home;
         };
+
+        function formatBytes(bytes) {
+            if (!bytes || bytes <= 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function CacheOpen() {
+            CacheData.loading = true;
+            CacheData.usageText = '正在统计...';
+            try {
+                if (navigator.storage && navigator.storage.estimate) {
+                    const estimate = await navigator.storage.estimate();
+                    CacheData.usageBytes = estimate.usage || 0;
+                    CacheData.quotaBytes = estimate.quota || 0;
+                    CacheData.usageText = formatBytes(CacheData.usageBytes);
+                    CacheData.quotaText = formatBytes(CacheData.quotaBytes);
+                } else {
+                    CacheData.usageText = '由浏览器自动管理';
+                    CacheData.quotaText = '按需分配';
+                }
+            } catch (e) {
+                console.error('Storage estimate error:', e);
+                CacheData.usageText = '统计失败';
+            } finally {
+                CacheData.loading = false;
+            }
+        }
+
+        async function ClearWebCache() {
+            CacheData.clearing = true;
+            try {
+                if (window.caches && caches.keys) {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(key => caches.delete(key)));
+                }
+                await CacheOpen();
+                if (typeof ElementPlus !== 'undefined' && ElementPlus.ElMessage) {
+                    ElementPlus.ElMessage.success('浏览器本地素材与数据缓存已清理');
+                }
+            } catch (e) {
+                console.error('Clear cache error:', e);
+                if (typeof ElementPlus !== 'undefined' && ElementPlus.ElMessage) {
+                    ElementPlus.ElMessage.error('清理缓存失败: ' + (e.message || '未知错误'));
+                }
+            } finally {
+                CacheData.clearing = false;
+            }
+        }
+
+        function ForceReload() {
+            window.location.reload(true);
+        }
+
         return {
             AboutData,
+            CacheData,
             LevelData,
             handlecommand,
             isuid,
             GoLogin,
             Lang,
-            AboutOpen
+            AboutOpen,
+            CacheOpen,
+            ClearWebCache,
+            ForceReload
         }
     }
 };
