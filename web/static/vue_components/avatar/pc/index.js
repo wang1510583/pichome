@@ -60,30 +60,39 @@ const comavatar = {
         </template>
         <el-dialog
             v-model="CacheData.visible"
-            title="素材与浏览器缓存"
-            width="460px"
+            title="素材与浏览器缓存状态"
+            width="500px"
             @open="CacheOpen">
             <div class="cacheBox" style="padding:10px 15px;" v-loading="CacheData.loading">
                 <div class="el-form el-form--default el-form--label-left">
                     <div class="el-form-item" style="margin-bottom: 12px;">
-                        <label class="el-form-item__label" style="width:110px;">已用缓存空间：</label>
-                        <div class="el-form-item__content" style="font-weight: bold; color: #409EFF; line-height: 32px;">
-                            {{CacheData.usageText}}
-                            <span v-if="CacheData.quotaBytes > 0" style="font-weight: normal; color: #909399; font-size: 12px; margin-left: 6px;">
-                                / 上限 {{CacheData.quotaText}}
+                        <label class="el-form-item__label" style="width:120px;">当前会话缓存命中：</label>
+                        <div class="el-form-item__content" style="line-height: 32px;">
+                            <span style="font-weight: bold; color: #67C23A; font-size: 15px;">{{CacheData.hitCount}} / {{CacheData.totalCount}}</span>
+                            <span style="color: #606266; font-size: 13px; margin-left: 8px;">
+                                (命中率 <b :style="{color: CacheData.hitRate > 0 ? '#67C23A' : '#909399'}">{{CacheData.hitRate}}%</b>，已节省 <b style="color: #409EFF;">{{CacheData.savedText}}</b>)
                             </span>
                         </div>
                     </div>
                     <div class="el-form-item" style="margin-bottom: 12px;">
-                        <label class="el-form-item__label" style="width:110px;">缓存机制：</label>
+                        <label class="el-form-item__label" style="width:120px;">离线存储占用：</label>
+                        <div class="el-form-item__content" style="line-height: 32px; color: #409EFF; font-weight: bold;">
+                            {{CacheData.usageText}}
+                            <span v-if="CacheData.quotaBytes > 0" style="font-weight: normal; color: #909399; font-size: 12px; margin-left: 6px;">
+                                / 浏览器配额 {{CacheData.quotaText}}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="el-form-item" style="margin-bottom: 12px;">
+                        <label class="el-form-item__label" style="width:120px;">加速机制：</label>
                         <div class="el-form-item__content" style="color: #606266; font-size: 13px; line-height: 32px;">
-                            HTTP 强缓存 (30天) + 协商缓存 (304)
+                            HTTP 强缓存 (30天私有缓存) + 协商缓存 (304)
                         </div>
                     </div>
                     <div class="el-form-item" style="margin-bottom: 16px;">
-                        <label class="el-form-item__label" style="width:110px;">加速说明：</label>
+                        <label class="el-form-item__label" style="width:120px;">缓存说明：</label>
                         <div class="el-form-item__content" style="color: #909399; font-size: 12px; line-height: 1.6;">
-                            图片和视频素材由浏览器本地自动缓存加速；基于素材物理特征版本号，分类与标签调整不重复拉取。
+                            浏览器采用系统级 Disk Cache 强缓存素材。只要素材物理内容未变，即使调整分类、重命名或刷新页面，均直接秒级命中本地缓存，不消耗服务器带宽。
                         </div>
                     </div>
                 </div>
@@ -150,7 +159,12 @@ const comavatar = {
             usageBytes: 0,
             quotaBytes: 0,
             usageText: '正在计算...',
-            quotaText: '未知'
+            quotaText: '未知',
+            totalCount: 0,
+            hitCount: 0,
+            hitRate: 0,
+            savedBytes: 0,
+            savedText: '0 B'
         });
         let isuid = ref(props.uid);
         let Lang = {
@@ -274,21 +288,59 @@ const comavatar = {
 
         async function CacheOpen() {
             CacheData.loading = true;
-            CacheData.usageText = '正在统计...';
             try {
+                // 1. 统计当前页面会话中的素材与静态资源缓存命中与节省流量
+                let total = 0;
+                let hits = 0;
+                let saved = 0;
+                if (window.performance && typeof performance.getEntriesByType === 'function') {
+                    const resources = performance.getEntriesByType('resource');
+                    for (let i = 0; i < resources.length; i++) {
+                        const r = resources[i];
+                        const name = r.name || '';
+                        const isMedia = name.indexOf('mod=io') !== -1 || name.indexOf('static/') !== -1 || r.initiatorType === 'img' || r.initiatorType === 'video';
+                        if (isMedia) {
+                            total++;
+                            // transferSize 为 0 或显著小于 decoded/encoded body size 表示命中浏览器缓存
+                            if (r.transferSize === 0 || (r.encodedBodySize > 0 && r.transferSize < r.encodedBodySize)) {
+                                hits++;
+                                saved += (r.decodedBodySize || r.encodedBodySize || 0);
+                            }
+                        }
+                    }
+                }
+                CacheData.totalCount = total;
+                CacheData.hitCount = hits;
+                CacheData.hitRate = total > 0 ? Math.round((hits / total) * 100) : 100;
+                CacheData.savedBytes = saved;
+                CacheData.savedText = formatBytes(saved);
+
+                // 2. 统计 Web Storage / CacheStorage
+                let storageUsage = 0;
                 if (navigator.storage && navigator.storage.estimate) {
                     const estimate = await navigator.storage.estimate();
-                    CacheData.usageBytes = estimate.usage || 0;
+                    storageUsage = estimate.usage || 0;
                     CacheData.quotaBytes = estimate.quota || 0;
-                    CacheData.usageText = formatBytes(CacheData.usageBytes);
                     CacheData.quotaText = formatBytes(CacheData.quotaBytes);
                 } else {
-                    CacheData.usageText = '由浏览器自动管理';
                     CacheData.quotaText = '按需分配';
                 }
+
+                // 统计 localStorage 大小
+                try {
+                    let lsBytes = 0;
+                    for (let key in localStorage) {
+                        if (localStorage.hasOwnProperty(key)) {
+                            lsBytes += (localStorage[key].length + key.length) * 2;
+                        }
+                    }
+                    storageUsage += lsBytes;
+                } catch (e) {}
+
+                CacheData.usageBytes = storageUsage;
+                CacheData.usageText = formatBytes(storageUsage);
             } catch (e) {
                 console.error('Storage estimate error:', e);
-                CacheData.usageText = '统计失败';
             } finally {
                 CacheData.loading = false;
             }
