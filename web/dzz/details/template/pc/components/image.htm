@@ -3,6 +3,7 @@
 		<template v-if="DocumentThemeColor == 'dark'">
 			<iframe 
 				style="border: 0px;"
+				allow="autoplay; fullscreen"
 				:src="imagesData.iniframe+'&theme=dark'" 
 				width="100%" 
 				height="100%"></iframe>
@@ -10,6 +11,7 @@
 		<template v-else>
 			<iframe 
 				style="border: 0px;"
+				allow="autoplay; fullscreen"
 				:src="imagesData.iniframe" 
 				width="100%" 
 				height="100%"></iframe>

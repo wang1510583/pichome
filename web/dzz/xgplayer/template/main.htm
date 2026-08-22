@@ -97,6 +97,7 @@
           width: '100%',
           height: 50,
 		  preloadNext: false,
+		  autoplay: true,
       });
 	  player.crossOrigin = "anonymous";
 	  var an=player.analyze(document.querySelector('canvas'))
@@ -110,6 +111,7 @@
       player.on('playing', function(){
           player.mode = 2;
       });
+      try { if (player.play) player.play(); } catch (e) {}
 	  
 	 
 	
@@ -122,23 +124,26 @@
           url: pichomePlayerMediaUrl,
           playsinline: true,
           "videoInit": true,
+          "autoplay": true,
       });
+      try { if (player.play) player.play(); } catch (e) {}
 	  </script>
 	  <!--{elseif $_GET['ext']=='m3u8' || $_GET['ext']=='HLS'}-->
 	 <script type="text/javascript">
       let player = new HlsPlayer({
           id: 'mse',
           url:pichomePlayerMediaUrl,
-          autoplay: false,
+          autoplay: true,
           playsinline: true,
           height: '100%',
           width: '100%',
 		   "videoInit": true,
       });
+      try { if (player.play) player.play(); } catch (e) {}
     </script>
 	  <!--{elseif $_GET['ext']=='mpg' || $_GET['ext']=='mpeg'}-->
 	   <script type="text/javascript">
-      new window.ShakaJsPlayer({
+      var player = new window.ShakaJsPlayer({
         id: 'mse',
         url: pichomePlayerMediaUrl,
         ignores: ['error'],
@@ -146,7 +151,9 @@
         height: '100%',
           width: '100%',
 		   "videoInit": true,
+		   "autoplay": true,
       });
+      try { if (player.play) player.play(); } catch (e) {}
     </script>
 	  <!--{else}-->
 	   <script type="text/javascript">
@@ -170,9 +177,21 @@
 		"download": false,
 		"pip": false,
 		"fluid": true,
-		  "videoInit": true,
-		"autoplay": false,
+		"videoInit": true,
+		"autoplay": true,
       });
+      try {
+          var playPromise = player.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+              playPromise.catch(function(e) {
+                  // If browser policy blocks unmuted autoplay, start muted
+                  if (player.video) {
+                      player.video.muted = true;
+                      player.play();
+                  }
+              });
+          }
+      } catch (e) {}
    </script>
 	  <!--{/if}-->
   </body>
