@@ -19,7 +19,121 @@ if(!perm::check('edit2',$perm)){
 $resourcesdata = C::t('pichome_resources')->fetch($rid);
 $appid = $resourcesdata['appid'];
 
-if($operation == 'save'){
+if($operation == 'setVideoCover'){
+    if(!$resourcesdata || !empty($resourcesdata['isdelete']) || getTypeByExt($resourcesdata['ext']) != 'video'){
+        exit(json_encode(array('success'=>false,'msg'=>lang('video_cover_invalid_resource'))));
+    }
+
+    $currentTime = isset($_GET['currentTime']) ? $_GET['currentTime'] : '';
+    if(!is_numeric($currentTime) || !is_finite(floatval($currentTime))){
+        exit(json_encode(array('success'=>false,'msg'=>lang('video_cover_invalid_time'))));
+    }
+    $currentTime = max(0, floatval($currentTime));
+    $attrdata = C::t('pichome_resources_attr')->fetch($rid);
+    $duration = isset($attrdata['duration']) ? floatval($attrdata['duration']) : 0;
+    if($duration > 0){
+        $currentTime = min($currentTime, max(0, $duration - 0.001));
+    }elseif($currentTime > 86400){
+        exit(json_encode(array('success'=>false,'msg'=>lang('video_cover_invalid_time'))));
+    }
+
+    $appdata = C::t('pichome_vapp')->fetch($appid);
+    $relativePath = isset($attrdata['path']) ? (string)$attrdata['path'] : '';
+    $inputFile = '';
+    $appRoot = false;
+    if(is_numeric($relativePath)){
+        $inputFile = IO::getStream('attach::'.intval($relativePath));
+    }elseif($relativePath !== '' && $appdata){
+        $rawAppPath = (string)$appdata['path'];
+        if(strpos($rawAppPath, ':') === false){
+            $appRoot = realpath($rawAppPath);
+            $candidate = rtrim($rawAppPath, '/\\').BS.ltrim(str_replace(array('/', '\\'), BS, $relativePath), '/\\');
+            $inputFile = realpath($candidate);
+            if(!$appRoot || !$inputFile || ($inputFile !== $appRoot && strpos($inputFile, $appRoot.DIRECTORY_SEPARATOR) !== 0)){
+                $inputFile = '';
+            }
+        }else{
+            $inputFile = IO::getStream(rtrim($rawAppPath, '/\\').'/'.ltrim($relativePath, '/\\'));
+        }
+    }
+    if(!$inputFile || !is_file($inputFile) || !is_readable($inputFile)){
+        exit(json_encode(array('success'=>false,'msg'=>lang('video_cover_source_unavailable'))));
+    }
+
+    $cacheDir = rtrim(getglobal('setting/attachdir'), '/\\').BS.'cache'.BS;
+    dmkdir($cacheDir);
+    $tempBase = tempnam($cacheDir, 'video-cover-');
+    if(!$tempBase){
+        exit(json_encode(array('success'=>false,'msg'=>lang('video_cover_create_failed'))));
+    }
+    @unlink($tempBase);
+    $tempCover = $tempBase.'.webp';
+
+    $ffmpegApp = C::t('app_market')->fetch_by_identifier('ffmpeg', 'dzz');
+    $ffmpegExtra = $ffmpegApp && $ffmpegApp['extra'] ? unserialize($ffmpegApp['extra']) : array();
+    $ffmpegBinary = !empty($ffmpegExtra['ffmpeg.binaries']) ? $ffmpegExtra['ffmpeg.binaries'] : (strstr(PHP_OS, 'WIN') ? DZZ_ROOT.'dzz\\ffmpeg\\ffmpeg\\ffmpeg.exe' : '/usr/bin/ffmpeg');
+    if(!is_file($ffmpegBinary) || !is_executable($ffmpegBinary)){
+        exit(json_encode(array('success'=>false,'msg'=>lang('video_cover_ffmpeg_unavailable'))));
+    }
+
+    $timeArg = number_format($currentTime, 6, '.', '');
+    $command = (!strstr(PHP_OS, 'WIN') && is_executable('/usr/bin/timeout') ? escapeshellarg('/usr/bin/timeout').' 60s ' : '')
+        .escapeshellarg($ffmpegBinary)
+        .' -hide_banner -loglevel error -y -ss '.escapeshellarg($timeArg)
+        .' -i '.escapeshellarg($inputFile)
+        .' -frames:v 1 -vf '.escapeshellarg('scale=1000:1000:force_original_aspect_ratio=decrease')
+        .' -c:v libwebp -quality 85 '.escapeshellarg($tempCover);
+    $commandOutput = array();
+    $commandStatus = 1;
+    @exec($command.' 2>&1', $commandOutput, $commandStatus);
+    if($commandStatus !== 0 || !is_file($tempCover) || filesize($tempCover) < 32){
+        @unlink($tempCover);
+        runlog('video_cover', 'FFmpeg failed for rid '.$rid.': '.implode(' ', array_slice($commandOutput, -3)));
+        exit(json_encode(array('success'=>false,'msg'=>lang('video_cover_extract_failed'))));
+    }
+
+    // Eagle keeps WebP thumbnail bytes in a file named *_thumbnail.png.
+    // Write it atomically as well, so Eagle and Pichome immediately share the same cover.
+    $eagleCoverWritten = false;
+    if(intval($appdata['type']) === 0 && $appRoot){
+        $eagleCover = preg_replace('/\.[^\.\\\/]+$/', '', $inputFile).'_thumbnail.png';
+        $eagleCoverTemp = $eagleCover.'.pichome-'.strtolower(random(8)).'.tmp';
+        if(@copy($tempCover, $eagleCoverTemp)){
+            @chmod($eagleCoverTemp, 0664);
+            $eagleCoverWritten = @rename($eagleCoverTemp, $eagleCover);
+        }
+        if(!$eagleCoverWritten){
+            @unlink($eagleCoverTemp);
+        }
+    }
+
+    $coverBytes = @file_get_contents($tempCover);
+    $attachment = $coverBytes !== false ? getTxtAttachByMd5($coverBytes, $resourcesdata['name'].'-cover.webp', 'webp') : false;
+    @unlink($tempCover);
+    $coverStored = $attachment && C::t('thumb_preview')->editCover($rid, $attachment['aid']);
+    if(!$coverStored && !$eagleCoverWritten){
+        exit(json_encode(array('success'=>false,'msg'=>lang('video_cover_save_failed'))));
+    }
+
+    $thumbdotime = max(TIMESTAMP, intval($resourcesdata['thumbdotime']) + 1);
+    C::t('pichome_resources')->update($rid, array('hasthumb'=>1, 'thumbdotime'=>$thumbdotime));
+    C::t('pichome_resources')->clear_cache('fetch_by_rid_'.implode('_', array($rid,0,1,$perm)));
+    dfsockopen(getglobal('localurl').'misc.php?mod=getPreviewThumb', 0, '', '', false, '', 1);
+
+    $freshResource = C::t('pichome_resources')->fetch($rid, true);
+    exit(json_encode(array(
+        'success'=>true,
+        'msg'=>lang('video_cover_set_success'),
+        'data'=>array(
+            'rid'=>$rid,
+            'currentTime'=>$currentTime,
+            'cover'=>pichome_media_stable_url($freshResource, 'getImg', 'small'),
+            'largeCover'=>pichome_media_stable_url($freshResource, 'getImg', 'large'),
+            'eagle'=>$eagleCoverWritten ? 1 : 0
+        )
+    )));
+
+}elseif($operation == 'save'){
     $flag = isset($_GET['flag']) ? trim($_GET['flag']):'';
     $val = trim($_GET['val']);
     $attrs = array(
@@ -359,5 +473,3 @@ if($operation == 'save'){
     }
     exit(json_encode(array('success' => true,'data'=>$data)));
 }
-
-

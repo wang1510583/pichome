@@ -19,5 +19,16 @@ $lang = array (
     'import_tag'=>'Import tags',
     'download_tag'=>'Download tags',
     'del_all_tag'=>'Delete all current tags',
-    'del_all_tag_tip'=>'Are you sure to delete all current tags? This operation cannot be restored!'
+    'del_all_tag_tip'=>'Are you sure to delete all current tags? This operation cannot be restored!',
+    'set_current_frame_as_cover'=>'Set as cover',
+    'video_cover_player_not_ready'=>'The video is not ready yet. Please try again.',
+    'video_cover_invalid_resource'=>'This item is not a video that can use a custom cover.',
+    'video_cover_invalid_time'=>'The current video position is invalid.',
+    'video_cover_source_unavailable'=>'The original video file cannot be read.',
+    'video_cover_ffmpeg_unavailable'=>'FFmpeg is not installed or configured on the server.',
+    'video_cover_create_failed'=>'Unable to create a temporary cover file.',
+    'video_cover_extract_failed'=>'Unable to extract the current video frame.',
+    'video_cover_save_failed'=>'Unable to save the cover image.',
+    'video_cover_set_failed'=>'Failed to set the cover image.',
+    'video_cover_set_success'=>'The current video frame is now the cover image.'
 );

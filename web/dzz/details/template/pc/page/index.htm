@@ -101,7 +101,8 @@
 					transform:0,
 					active:0,
 					size:false
-				}
+				},
+				VideoCoverLoading:false
 			}
 		},
 		watch: {
@@ -232,6 +233,49 @@
 		
 		
 		methods: {
+			async SetCurrentVideoFrameAsCover(){
+				const self = this;
+				const video = self.FramePreviewFindVideo(document);
+				if(!video || video.readyState < 1){
+					self.$message.error('{lang video_cover_player_not_ready}');
+					return false;
+				}
+				try{
+					video.pause();
+					self.VideoCoverLoading = true;
+					const response = await axios.post(MOD_URL+'&op=fileinterface&operation=setVideoCover',{
+						path:self.path,
+						currentTime:video.currentTime
+					});
+					const result = response.data || {};
+					if(!result.success){
+						self.$message.error(result.msg || '{lang video_cover_set_failed}');
+						return false;
+					}
+					if(result.data){
+						self.imagesData.icondata = result.data.cover || self.imagesData.icondata;
+						self.imagesData.originalimg = result.data.largeCover || self.imagesData.originalimg;
+						try{
+							if(window.parent && window.parent !== window && window.parent.dzzoffice && window.parent.dzzoffice.WindowThis){
+								const parentApp = window.parent.dzzoffice.WindowThis;
+								const refsKey = String.fromCharCode(36)+'refs';
+								const parentRefs = parentApp[refsKey];
+								if(parentRefs && parentRefs.RefImageLayout){
+									parentRefs.RefImageLayout.UpdateData(self.imagesData.rid,'hasthumb',1);
+									parentRefs.RefImageLayout.UpdateData(self.imagesData.rid,'icondata',result.data.cover);
+								}
+							}
+						}catch(error){}
+					}
+					self.$message.success(result.msg || '{lang video_cover_set_success}');
+					return true;
+				}catch(error){
+					self.$message.error('{lang video_cover_set_failed}');
+					return false;
+				}finally{
+					self.VideoCoverLoading = false;
+				}
+			},
 			FramePreviewEditableTarget(target){
 				if(!target || !target.closest) return false;
 				return !!target.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]');

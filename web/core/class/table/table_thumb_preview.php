@@ -81,14 +81,14 @@ class table_thumb_preview extends dzz_table
             'sstatus'=>0,
             'lstatus'=>0,
         ];
-        if($coverdata = DB::fetch_first("select id from %t where rid = %s  and iscover = %d ",[$this->_table,$rid,1])){
-           if($coverdata['opath'] != $aid){
+        if($coverdata = DB::fetch_first("select id,opath,aid from %t where rid = %s  and iscover = %d ",[$this->_table,$rid,1])){
+           if(intval($coverdata['aid']) != intval($aid)){
                if(parent::update($coverdata['id'],$setarr)){
                    C::t('attachment')->addcopy_by_aid($aid,1);
                    C::t('attachment')->delete_by_aid($coverdata['aid']);
                    return true;
                }
-           }
+           }else return true;
         }else{
             if(parent::insert($setarr,1)){
                 C::t('attachment')->addcopy_by_aid($aid,1);

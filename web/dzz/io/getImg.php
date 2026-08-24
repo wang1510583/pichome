@@ -163,6 +163,22 @@ elseif($appdata['type'] == 2) {//billfish缩略图
 
 }
 
+// A manually selected cover takes precedence over generated/library thumbnails.
+// Keep this override close to streaming so stable RID URLs work for every library type.
+$coverdata = DB::fetch_first("select opath,spath,lpath,sstatus,lstatus from %t where rid = %s and iscover = %d", array('thumb_preview', $patharr['rid'], 1));
+if($coverdata){
+    if(!empty($patharr['thumbsign']) && !empty($coverdata['lstatus']) && !empty($coverdata['lpath'])){
+        $coverpath = $coverdata['lpath'];
+    }elseif(empty($patharr['thumbsign']) && !empty($coverdata['sstatus']) && !empty($coverdata['spath'])){
+        $coverpath = $coverdata['spath'];
+    }else{
+        $coverpath = $coverdata['opath'];
+    }
+    if($coverpath && IO::checkfileexists($coverpath)){
+        $thumbpath = $coverpath;
+    }
+}
+
 function mbStrSplit($string, $len = 1)
 {
     $start = 0;
