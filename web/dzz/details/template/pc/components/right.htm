@@ -54,15 +54,6 @@
 					<el-button plain @click="rightCollection" size="large" v-if="parseInt(imagesData.collection)" circle icon="Star"></el-button>
 				</el-tooltip>
 			</div>
-			<el-button
-				v-if="parseInt(imagesData.edit) && (imagesData.type == 'video' || imagesData.opentype == 'video')"
-				plain
-				v-cloak
-				icon="PictureFilled"
-				:loading="VideoCoverLoading"
-				@click="SetCurrentVideoFrameAsCover"
-				style="width: 100%;margin: 0 0 18px;">{lang set_current_frame_as_cover}</el-button>
-			
 			<div class="message">
 				<div class="thesis-wrap" v-if="imagesData.colors && imagesData.colors.length">
 					<el-text v-cloak truncated tag="b" class="tip-title" size="large" style="color: var(--el-text-color-primary);">

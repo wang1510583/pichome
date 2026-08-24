@@ -234,6 +234,7 @@
 		
 		methods: {
 			async SetCurrentVideoFrameAsCover(){
+				if(this.VideoCoverLoading) return false;
 				const self = this;
 				const video = self.FramePreviewFindVideo(document);
 				if(!video || video.readyState < 1){

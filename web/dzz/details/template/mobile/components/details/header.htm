@@ -2,13 +2,83 @@
 <div style="width: 50px;text-align: center;height: 50px;line-height: 50px;" @click.stop="HeaderNavbarLeftClick">
 	<el-icon style="color: var(--el-text-color-primary);"><Arrow-Left-Bold /></el-icon>
 </div>
-<div style="width: 50px;text-align: center;height: 50px;line-height: 50px;font-size: var(--el-font-size-extra-large);" @click.stop="InformationPopup=true">
-	<el-icon><More /></el-icon>
+<div style="display:flex;align-items:center;height:50px;">
+	<div
+		v-if="MobileVideoCoverVisible()"
+		style="width: 50px;text-align: center;height: 50px;line-height: 50px;font-size: var(--el-font-size-extra-large);"
+		role="button"
+		aria-label="{lang set_current_frame_as_cover}"
+		@click.stop="MobileSetCurrentVideoFrameAsCover">
+		<el-icon v-if="VideoCoverLoading" class="is-loading"><Loading></Loading></el-icon>
+		<el-icon v-else><Picture-Filled></Picture-Filled></el-icon>
+	</div>
+	<div style="width: 50px;text-align: center;height: 50px;line-height: 50px;font-size: var(--el-font-size-extra-large);" @click.stop="InformationPopup=true">
+		<el-icon><More></More></el-icon>
+	</div>
 </div>
 
 <script type="text/javascript">
 	var HeaderMixin = {
 		methods:{
+			MobileVideoCoverVisible(){
+				const current = this.showdata && this.showdata[this.showdataindex];
+				if(!current || current.loading || !current.data) return false;
+				const data = current.data;
+				const canEdit = parseInt(data.edit) || parseInt(this.DocumentAdminId) === 1;
+				return !!canEdit && (data.type == 'video' || data.opentype == 'video');
+			},
+			MobileFindVideo(rootDocument){
+				try{
+					if(!rootDocument || !rootDocument.querySelectorAll) return null;
+					const videos = rootDocument.querySelectorAll('video');
+					for(let index = 0; index < videos.length; index++){
+						if(videos[index].readyState >= 1) return videos[index];
+					}
+					const frames = rootDocument.querySelectorAll('iframe');
+					for(let index = 0; index < frames.length; index++){
+						const nested = this.MobileFindVideo(frames[index].contentDocument);
+						if(nested) return nested;
+					}
+					return videos.length ? videos[0] : null;
+				}catch(error){
+					return null;
+				}
+			},
+			async MobileSetCurrentVideoFrameAsCover(){
+				if(this.VideoCoverLoading) return false;
+				const self = this;
+				const video = self.MobileFindVideo(document);
+				if(!video || video.readyState < 1){
+					ElMessage.error('{lang video_cover_player_not_ready}');
+					return false;
+				}
+				try{
+					video.pause();
+					self.VideoCoverLoading = true;
+					const response = await axios.post(MOD_URL+'&op=fileinterface&operation=setVideoCover',{
+						path:self.path,
+						currentTime:video.currentTime
+					});
+					const result = response.data || {};
+					if(!result.success){
+						ElMessage.error(result.msg || '{lang video_cover_set_failed}');
+						return false;
+					}
+					const current = self.showdata[self.showdataindex];
+					if(current && current.data && result.data){
+						current.data.icondata = result.data.cover || current.data.icondata;
+						current.data.originalimg = result.data.largeCover || current.data.originalimg;
+						self.storagedata[self.path] = current.data;
+					}
+					ElMessage.success(result.msg || '{lang video_cover_set_success}');
+					return true;
+				}catch(error){
+					ElMessage.error('{lang video_cover_set_failed}');
+					return false;
+				}finally{
+					self.VideoCoverLoading = false;
+				}
+			},
 			HeaderNavbarLeftClick(){
 				let div = window.parent.document.querySelector('.Details-Iframe');
 				if(div){

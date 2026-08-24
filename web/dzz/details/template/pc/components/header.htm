@@ -99,6 +99,21 @@
 					</el-button>
 				</el-tooltip>
 				<!--{/if}-->
+				<el-tooltip
+					v-if="!HtmlLoading && (parseInt(imagesData.edit) || parseInt(DocumentAdminId) === 1) && (imagesData.type == 'video' || imagesData.opentype == 'video')"
+					effect="dark"
+					content="{lang set_current_frame_as_cover}"
+					placement="bottom">
+					<div
+						class="right-block"
+						:class="{'is-loading':VideoCoverLoading}"
+						role="button"
+						aria-label="{lang set_current_frame_as_cover}"
+						@click.stop="SetCurrentVideoFrameAsCover">
+						<el-icon v-if="VideoCoverLoading" class="is-loading"><Loading></Loading></el-icon>
+						<el-icon v-else><Picture-Filled></Picture-Filled></el-icon>
+					</div>
+				</el-tooltip>
 				<el-tooltip effect="dark" :content="IsFullScreen?'{lang exit}':'{lang full_screen}'" placement="bottom">
 					<div class="right-block" @click="headerFullScreen(IsFullScreen?false:true)">
 						<el-icon v-if="IsFullScreen" v-cloak><Scale-To-Original /></el-icon>

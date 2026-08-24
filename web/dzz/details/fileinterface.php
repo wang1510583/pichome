@@ -13,7 +13,7 @@ $rid = $patharr['path'];
 $isshare = $patharr['isshare'];
 $perm = $patharr['perm'];
 $isadmin = $patharr['isadmin'];
-if(!perm::check('edit2',$perm)){
+if(getglobal('adminid') != 1 && !perm::check('edit2',$perm)){
     exit(json_encode(array('status'=>2,'error'=>lang('no_perm'))));
 }
 $resourcesdata = C::t('pichome_resources')->fetch($rid);
