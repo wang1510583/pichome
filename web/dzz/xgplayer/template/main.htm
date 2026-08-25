@@ -93,6 +93,34 @@
 				}
 			}
 		} catch (ignore) {}
+		function pichomePrepareVideoSound(mediaPlayer) {
+			try {
+				if (!mediaPlayer) return;
+				mediaPlayer.volume = 1;
+				mediaPlayer.muted = false;
+				var video = mediaPlayer.video || document.querySelector('#mse video');
+				if (!video) return;
+				video.defaultMuted = false;
+				video.muted = false;
+				video.volume = 1;
+				video.removeAttribute('muted');
+			} catch (ignore) {}
+		}
+		function pichomePlayVideoWithSound(mediaPlayer) {
+			pichomePrepareVideoSound(mediaPlayer);
+			try {
+				var playPromise = mediaPlayer && mediaPlayer.play ? mediaPlayer.play() : null;
+				if (playPromise && typeof playPromise.catch === 'function') {
+					playPromise.catch(function() {
+						// Keep the player unmuted. If the browser blocks audible autoplay,
+						// the user can press play and audio starts at full volume.
+						pichomePrepareVideoSound(mediaPlayer);
+					});
+				}
+			} catch (ignore) {
+				pichomePrepareVideoSound(mediaPlayer);
+			}
+		}
 	</script>
   
 	
@@ -138,11 +166,12 @@
           id: 'mse',
           url: pichomePlayerMediaUrl,
           playsinline: true,
+          volume: 1,
           "videoInit": true,
           "autoplay": true,
           "loop": pichomeIsVideoLoop,
       });
-      try { if (player.play) player.play(); } catch (e) {}
+      pichomePlayVideoWithSound(player);
 	  </script>
 	  <!--{elseif $_GET['ext']=='m3u8' || $_GET['ext']=='HLS'}-->
 	 <script type="text/javascript">
@@ -151,12 +180,13 @@
           url:pichomePlayerMediaUrl,
           autoplay: true,
           playsinline: true,
+          volume: 1,
           height: '100%',
           width: '100%',
 		   "videoInit": true,
 		   "loop": pichomeIsVideoLoop,
       });
-      try { if (player.play) player.play(); } catch (e) {}
+      pichomePlayVideoWithSound(player);
     </script>
 	  <!--{elseif $_GET['ext']=='mpg' || $_GET['ext']=='mpeg'}-->
 	   <script type="text/javascript">
@@ -165,13 +195,14 @@
         url: pichomePlayerMediaUrl,
         ignores: ['error'],
         playsinline: true,
+        volume: 1,
         height: '100%',
           width: '100%',
 		   "videoInit": true,
 		   "autoplay": true,
 		   "loop": pichomeIsVideoLoop,
       });
-      try { if (player.play) player.play(); } catch (e) {}
+      pichomePlayVideoWithSound(player);
     </script>
 	  <!--{else}-->
 	   <script type="text/javascript">
@@ -180,6 +211,7 @@
 		"id": "mse",
 		"url": pichomePlayerMediaUrl,
 		"playsinline": true,
+		"volume": 1,
 		"whitelist": [
 				""
 		],
@@ -199,18 +231,7 @@
 		"autoplay": true,
 		"loop": pichomeIsVideoLoop,
       });
-      try {
-          var playPromise = player.play();
-          if (playPromise && typeof playPromise.catch === 'function') {
-              playPromise.catch(function(e) {
-                  // If browser policy blocks unmuted autoplay, start muted
-                  if (player.video) {
-                      player.video.muted = true;
-                      player.play();
-                  }
-              });
-          }
-      } catch (e) {}
+      pichomePlayVideoWithSound(player);
    </script>
 	  <!--{/if}-->
 	  <script type="text/javascript">
