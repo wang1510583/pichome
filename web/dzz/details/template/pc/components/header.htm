@@ -111,7 +111,11 @@
 						:aria-label="MediaMirrorPreview?'{lang cancel_mirror_preview}':'{lang mirror_preview}'"
 						:aria-pressed="MediaMirrorPreview?'true':'false'"
 						@click.stop="ToggleMediaMirrorPreview">
-						<i class="iconfont icon-zuoyoufanzhuan_huaban1" style="font-size: 22px;"></i>
+						<svg class="mirror-preview-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+							<path d="M12 3v18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"></path>
+							<path d="M9.5 5 3.5 12l6 7V5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+							<path d="m14.5 5 6 7-6 7V5Z" fill="currentColor"></path>
+						</svg>
 					</div>
 				</el-tooltip>
 				<el-tooltip
