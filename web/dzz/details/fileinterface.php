@@ -13,6 +13,24 @@ $rid = $patharr['path'];
 $isshare = $patharr['isshare'];
 $perm = $patharr['perm'];
 $isadmin = $patharr['isadmin'];
+$frameAtlasOperations = array('frameAtlasManifest', 'frameAtlas');
+if(in_array($operation, $frameAtlasOperations, true)){
+    $ulevel = getglobal('pichomelevel') ? getglobal('pichomelevel') : 0;
+    $resourcesdata = C::t('pichome_resources')->fetch_by_rid($rid,$isshare,1,$perm);
+    $appdata = $resourcesdata ? C::t('pichome_vapp')->fetch($resourcesdata['appid']) : array();
+    if($perm && $resourcesdata){
+        $resourcesdata['view'] = perm::check('read2',$perm) ? 1 : 0;
+    }
+    if(!$resourcesdata
+        || ((!isset($resourcesdata['view']) || !$resourcesdata['view'])
+            && !$isshare
+            && !C::t('pichome_vapp')->getpermbypermdata($appdata['view'],$resourcesdata['appid']))
+        || (!$isshare && $ulevel < $resourcesdata['level'])){
+        exit(json_encode(array('status'=>2,'error'=>lang('no_perm'))));
+    }
+    require_once MOD_PATH.'/frameatlas.php';
+    pichome_frame_atlas_handle($operation, $rid, $resourcesdata, $appdata);
+}
 if(getglobal('adminid') != 1 && !perm::check('edit2',$perm)){
     exit(json_encode(array('status'=>2,'error'=>lang('no_perm'))));
 }

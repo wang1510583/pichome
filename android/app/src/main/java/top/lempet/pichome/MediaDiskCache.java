@@ -45,9 +45,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Private, login-scoped media cache for Pichome's getImg/getStream endpoints.
- * Images are cached while they are displayed. Partial video requests trigger one background
- * download so a later preview can be served entirely from app-private storage.
+ * Private, login-scoped media cache for Pichome media and revisioned frame-atlas endpoints.
+ * Images and one-second frame atlases are cached while displayed. Partial video requests trigger
+ * one background download so a later preview can be served entirely from app-private storage.
  */
 final class MediaDiskCache {
     private static final long DEFAULT_MAX_CACHE_BYTES = 4L * 1024L * 1024L * 1024L;
@@ -215,7 +215,7 @@ final class MediaDiskCache {
         try {
             Uri uri = Uri.parse(url);
             if (!isCacheableMediaUri(uri)) {
-                lastDiagnostic = "已发现素材，但地址不是 getImg/getStream";
+                lastDiagnostic = "已发现素材，但地址不是可缓存媒体";
                 return;
             }
             String key = cacheKey(uri.toString(), cacheIdentity);
@@ -335,9 +335,13 @@ final class MediaDiskCache {
         String query = uri.getEncodedQuery();
         if (query == null) return false;
         String normalized = query.toLowerCase(Locale.US);
-        return hasQueryValue(normalized, "mod", "io")
+        boolean regularMedia = hasQueryValue(normalized, "mod", "io")
                 && (hasQueryValue(normalized, "op", "getimg")
                 || hasQueryValue(normalized, "op", "getstream"));
+        boolean frameAtlas = hasQueryValue(normalized, "mod", "details")
+                && hasQueryValue(normalized, "op", "fileinterface")
+                && hasQueryValue(normalized, "operation", "frameatlas");
+        return regularMedia || frameAtlas;
     }
 
     private boolean isPlayerPageUri(Uri uri) {
@@ -426,6 +430,21 @@ final class MediaDiskCache {
     private String stableMediaIdentity(Uri uri) {
         if (uri == null) return "";
         try {
+            if ("details".equalsIgnoreCase(uri.getQueryParameter("mod"))
+                    && "fileinterface".equalsIgnoreCase(uri.getQueryParameter("op"))
+                    && "frameAtlas".equalsIgnoreCase(uri.getQueryParameter("operation"))) {
+                String atlasRid = valueOrEmpty(uri.getQueryParameter("pichome_atlas_rid")).trim();
+                String revision = valueOrEmpty(uri.getQueryParameter("revision")).trim();
+                String second = valueOrEmpty(uri.getQueryParameter("second")).trim();
+                String version = valueOrEmpty(uri.getQueryParameter("pichome_atlas_version")).trim();
+                if (!atlasRid.isEmpty() && atlasRid.length() <= 256
+                        && revision.matches("[0-9a-f]{24}")
+                        && second.matches("\\d{1,9}")
+                        && version.matches("\\d{1,3}")) {
+                    return "atlas:" + atlasRid + ":" + revision + ":" + second + ":v" + version;
+                }
+                return "";
+            }
             String rid = uri.getQueryParameter("pichome_rid");
             if (rid == null) return "";
             rid = rid.trim();
