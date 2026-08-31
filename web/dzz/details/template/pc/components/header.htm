@@ -100,6 +100,21 @@
 				</el-tooltip>
 				<!--{/if}-->
 				<el-tooltip
+					v-if="MediaMirrorPreviewVisible()"
+					effect="dark"
+					:content="MediaMirrorPreview?'{lang cancel_mirror_preview}':'{lang mirror_preview}'"
+					placement="bottom">
+					<div
+						class="right-block mirror-preview-button"
+						:class="{'is-active':MediaMirrorPreview}"
+						role="button"
+						:aria-label="MediaMirrorPreview?'{lang cancel_mirror_preview}':'{lang mirror_preview}'"
+						:aria-pressed="MediaMirrorPreview?'true':'false'"
+						@click.stop="ToggleMediaMirrorPreview">
+						<i class="iconfont icon-zuoyoufanzhuan_huaban1" style="font-size: 22px;"></i>
+					</div>
+				</el-tooltip>
+				<el-tooltip
 					v-if="!HtmlLoading && (parseInt(imagesData.edit) || parseInt(DocumentAdminId) === 1) && (imagesData.type == 'video' || imagesData.opentype == 'video')"
 					effect="dark"
 					content="{lang set_current_frame_as_cover}"
@@ -162,6 +177,69 @@
 			}
 		},
 		methods:{
+			MediaMirrorPreviewVisible(){
+				const data = this.imagesData || {};
+				if(this.HtmlLoading || !data.rid) return false;
+				const isVideo = data.type == 'video' || data.opentype == 'video';
+				const isImage = !data.iniframe && !!(data.originalimg || data.icondata);
+				return isVideo || isImage;
+			},
+			MediaMirrorSetVideoDocument(rootDocument,enabled){
+				try{
+					if(!rootDocument || !rootDocument.querySelectorAll) return;
+					if(enabled && !rootDocument.getElementById('pichome-mirror-preview-style')){
+						const style = rootDocument.createElement('style');
+						style.id = 'pichome-mirror-preview-style';
+						style.textContent = '.pichome-mirror-preview-target{transform:scaleX(-1)!important;transform-origin:center center!important;}';
+						(rootDocument.head || rootDocument.documentElement).appendChild(style);
+					}
+					rootDocument.querySelectorAll('video').forEach(function(video){
+						video.classList.toggle('pichome-mirror-preview-target',!!enabled);
+					});
+					const self = this;
+					rootDocument.querySelectorAll('iframe').forEach(function(frame){
+						try{self.MediaMirrorSetVideoDocument(frame.contentDocument,enabled);}catch(error){}
+					});
+				}catch(error){}
+			},
+			ApplyMediaMirrorPreview(enabled){
+				const self = this;
+				const picture = document.querySelector('.picture-box');
+				if(!picture) return;
+				picture.querySelectorAll('video').forEach(function(video){
+					video.classList.toggle('pichome-mirror-preview-target',!!enabled);
+				});
+				picture.querySelectorAll('iframe').forEach(function(frame){
+					const apply = function(){
+						try{self.MediaMirrorSetVideoDocument(frame.contentDocument,enabled);}catch(error){}
+					};
+					apply();
+					if(frame.dataset.pichomeMirrorPreviewBound != '1'){
+						frame.dataset.pichomeMirrorPreviewBound = '1';
+						frame.addEventListener('load',function(){
+							self.MediaMirrorSetVideoDocument(frame.contentDocument,self.MediaMirrorPreview);
+						});
+					}
+				});
+			},
+			ResetMediaMirrorPreview(){
+				this.MediaMirrorPreview = false;
+				if(this.ImgParam && this.ImgParam.scaleX != 0) this.ImgParam.scaleX = 0;
+				const self = this;
+				this.$nextTick(function(){self.ApplyMediaMirrorPreview(false);});
+			},
+			ToggleMediaMirrorPreview(){
+				if(!this.MediaMirrorPreviewVisible()) return false;
+				const isVideo = this.imagesData.type == 'video' || this.imagesData.opentype == 'video';
+				if(!isVideo && !this.imagesData.iniframe){
+					this.headerImgOperation(4);
+					return true;
+				}
+				this.MediaMirrorPreview = !this.MediaMirrorPreview;
+				const self = this;
+				this.$nextTick(function(){self.ApplyMediaMirrorPreview(self.MediaMirrorPreview);});
+				return true;
+			},
 			headerSliderDrag(even){//滑块移动
 				var self = this;
 				var box = document.querySelector('.el-slider__button-wrapper');
@@ -295,8 +373,10 @@
 					var scaleX = this.ImgParam.scaleX;
 					if(scaleX == 0){
 						this.ImgParam.scaleX = -1;
+						this.MediaMirrorPreview = true;
 					}else{
 						this.ImgParam.scaleX = 0;
+						this.MediaMirrorPreview = false;
 					}
 				}else if(type==5){
 					var scaleY = this.ImgParam.scaleY;

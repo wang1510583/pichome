@@ -68,6 +68,18 @@
 	.el-collapse-item__header .el-collapse-item__content{
 		border: 0;
 	}
+	.pichome-mirror-preview-target{
+		transform: scaleX(-1) !important;
+		transform-origin: center center !important;
+	}
+	.mobile-mirror-preview-button.is-active{
+		color: var(--el-color-primary);
+		background: var(--el-color-primary-light-9);
+		border-radius: 50%;
+	}
+	.mobile-mirror-preview-button:active{
+		transform: scale(.94);
+	}
 </style>
 <script>
 	function debounce(fun, delay) {
@@ -161,7 +173,8 @@
 					data:[],
 					active:0,
 				},
-				VideoCoverLoading:false
+				VideoCoverLoading:false,
+				MobileMirrorPreview:false
 			};
 		},
 		watch:{
@@ -254,6 +267,7 @@
 		methods:{
 			async CommonOrder(){
 				var self = this;
+				self.MobileMirrorPreview = false;
 				var NewShowData = [];
 				if (self.paths.length) {
 					if(self.storagedata[self.paths[self.ridIndex]]){
@@ -320,6 +334,7 @@
 				
 				self.showdata = NewShowData;
 				self.PinchZoom = null;
+				self.$nextTick(function(){self.MobileApplyMirrorPreview(false);});
 				for(var i in NewShowData){
 					if(NewShowData[i].type == 'center'){
 						this.showdataindex = i;

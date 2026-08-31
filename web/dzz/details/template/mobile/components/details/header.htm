@@ -4,6 +4,17 @@
 </div>
 <div style="display:flex;align-items:center;height:50px;">
 	<div
+		v-if="MobileMirrorPreviewVisible()"
+		class="mobile-mirror-preview-button"
+		:class="{'is-active':MobileMirrorPreview}"
+		style="width: 50px;text-align: center;height: 50px;line-height: 50px;font-size: var(--el-font-size-extra-large);"
+		role="button"
+		:aria-label="MobileMirrorPreview?'{lang cancel_mirror_preview}':'{lang mirror_preview}'"
+		:aria-pressed="MobileMirrorPreview?'true':'false'"
+		@click.stop="MobileToggleMirrorPreview">
+		<i class="iconfont icon-zuoyoufanzhuan_huaban1" style="font-size: 22px;"></i>
+	</div>
+	<div
 		v-if="MobileVideoCoverVisible()"
 		style="width: 50px;text-align: center;height: 50px;line-height: 50px;font-size: var(--el-font-size-extra-large);"
 		role="button"
@@ -20,6 +31,59 @@
 <script type="text/javascript">
 	var HeaderMixin = {
 		methods:{
+			MobileMirrorPreviewVisible(){
+				const current = this.showdata && this.showdata[this.showdataindex];
+				if(!current || current.loading || !current.data || !current.data.rid) return false;
+				const data = current.data;
+				const isVideo = data.type == 'video' || data.opentype == 'video';
+				const isImage = !data.iniframe && !!(data.originalimg || data.icondata);
+				return isVideo || isImage;
+			},
+			MobileMirrorSetDocument(rootDocument,enabled){
+				try{
+					if(!rootDocument || !rootDocument.querySelectorAll) return;
+					if(enabled && !rootDocument.getElementById('pichome-mirror-preview-style')){
+						const style = rootDocument.createElement('style');
+						style.id = 'pichome-mirror-preview-style';
+						style.textContent = '.pichome-mirror-preview-target{transform:scaleX(-1)!important;transform-origin:center center!important;}';
+						(rootDocument.head || rootDocument.documentElement).appendChild(style);
+					}
+					rootDocument.querySelectorAll('video').forEach(function(video){
+						video.classList.toggle('pichome-mirror-preview-target',!!enabled);
+					});
+					const self = this;
+					rootDocument.querySelectorAll('iframe').forEach(function(frame){
+						try{self.MobileMirrorSetDocument(frame.contentDocument,enabled);}catch(error){}
+					});
+				}catch(error){}
+			},
+			MobileApplyMirrorPreview(enabled){
+				const self = this;
+				const center = document.querySelector('.detail-popup-content.center');
+				if(!center) return;
+				center.querySelectorAll('.image-viewer__img,video').forEach(function(media){
+					media.classList.toggle('pichome-mirror-preview-target',!!enabled);
+				});
+				center.querySelectorAll('iframe').forEach(function(frame){
+					const apply = function(){
+						try{self.MobileMirrorSetDocument(frame.contentDocument,enabled);}catch(error){}
+					};
+					apply();
+					if(frame.dataset.pichomeMirrorPreviewBound != '1'){
+						frame.dataset.pichomeMirrorPreviewBound = '1';
+						frame.addEventListener('load',function(){
+							self.MobileMirrorSetDocument(frame.contentDocument,self.MobileMirrorPreview);
+						});
+					}
+				});
+			},
+			MobileToggleMirrorPreview(){
+				if(!this.MobileMirrorPreviewVisible()) return false;
+				this.MobileMirrorPreview = !this.MobileMirrorPreview;
+				const self = this;
+				this.$nextTick(function(){self.MobileApplyMirrorPreview(self.MobileMirrorPreview);});
+				return true;
+			},
 			MobileVideoCoverVisible(){
 				const current = this.showdata && this.showdata[this.showdataindex];
 				if(!current || current.loading || !current.data) return false;

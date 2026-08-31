@@ -25,6 +25,17 @@
 	body{
 		background: var(--el-bg-color);
 	}
+	#top_header .mirror-preview-button.is-active{
+		color: var(--el-color-primary);
+		background: var(--el-color-primary-light-9);
+	}
+	#top_header .mirror-preview-button:active{
+		transform: scale(.94);
+	}
+	.pichome-mirror-preview-target{
+		transform: scaleX(-1) !important;
+		transform-origin: center center !important;
+	}
 </style>
 <!--{template common/container/pc/header_end}-->
 <div id="dzzoffice">
@@ -102,12 +113,14 @@
 					active:0,
 					size:false
 				},
-				VideoCoverLoading:false
+				VideoCoverLoading:false,
+				MediaMirrorPreview:false
 			}
 		},
 		watch: {
 			path:{
 				handler(val){
+					this.ResetMediaMirrorPreview();
 					if(val){
 						sessionStorage.setItem('detailpath',self.path);
 					}

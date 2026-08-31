@@ -156,7 +156,9 @@
 				if(self.ImgParam.scaleY != 0){
 					str += ' scaleY('+self.ImgParam.scaleY+')';
 				}
-				document.querySelector('.image-viewer__img').style.transform = str;
+				document.querySelectorAll('.picture-box .image-viewer__img').forEach(function(image){
+					image.style.transform = str;
+				});
 			},
 			imageDrag(e){//图片移动
 				var self = this;
