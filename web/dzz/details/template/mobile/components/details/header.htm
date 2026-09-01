@@ -4,6 +4,14 @@
 </div>
 <div style="display:flex;align-items:center;height:50px;">
 	<div
+		v-if="MobileFrameScrubSensitivityVisible()"
+		class="mobile-frame-scrub-sensitivity-button"
+		role="button"
+		:aria-label="'{lang frame_scrub_sensitivity} '+MobileFrameScrubPixelsPerFrame+'px · {lang frame_scrub_switch}'"
+		@click.stop="MobileToggleFrameScrubSensitivity">
+		<span>{{MobileFrameScrubPixelsPerFrame}}px</span>
+	</div>
+	<div
 		v-if="MobileMirrorPreviewVisible()"
 		class="mobile-mirror-preview-button"
 		:class="{'is-active':MobileMirrorPreview}"
@@ -34,7 +42,83 @@
 
 <script type="text/javascript">
 	var HeaderMixin = {
+		data(){
+			return {
+				MobileFrameScrubPixelsPerFrame:(function(){
+					try{
+						let value = localStorage.getItem('pichomeFrameScrubPixels') || localStorage.getItem('pichomeDesktopFrameScrubPixels');
+						return value == '14' || value == '3' ? 14 : 7;
+					}catch(error){return 7;}
+				})()
+			};
+		},
 		methods:{
+			MobileFrameScrubSensitivityVisible(){
+				const current = this.showdata && this.showdata[this.showdataindex];
+				if(!current || current.loading || !current.data || !current.data.rid) return false;
+				const data = current.data;
+				return data.type == 'video' || data.opentype == 'video';
+			},
+			MobileToggleFrameScrubSensitivity(){
+				if(!this.MobileFrameScrubSensitivityVisible()) return false;
+				this.MobileFrameScrubPixelsPerFrame = this.MobileFrameScrubPixelsPerFrame == 14 ? 7 : 14;
+				try{
+					localStorage.setItem('pichomeFrameScrubPixels',String(this.MobileFrameScrubPixelsPerFrame));
+					localStorage.setItem('pichomeDesktopFrameScrubPixels',String(this.MobileFrameScrubPixelsPerFrame));
+				}catch(error){}
+				if(window.PichomeFrameScrub && window.PichomeFrameScrub.setPixelsPerFrame){
+					window.PichomeFrameScrub.setPixelsPerFrame(document,this.MobileFrameScrubPixelsPerFrame);
+				}
+				return true;
+			},
+			MobileInstallFrameScrubDocument(rootDocument,item){
+				try{
+					const api = window.PichomeFrameScrub || window.PichomeDesktopFrameScrub;
+					if(!api || !api.installDocument || !rootDocument || !rootDocument.querySelectorAll) return false;
+					const mediaItem = item || (this.showdata && this.showdata[this.showdataindex]);
+					const data = mediaItem && mediaItem.data;
+					if(!data || !data.rid) return false;
+					api.installDocument(rootDocument,{
+						rid:data.rid,
+						path:mediaItem.id || data.dpath || this.path,
+						endpoint:MOD_URL+'&op=fileinterface',
+						profile:'mobile-hq',
+						pixelsPerFrame:this.MobileFrameScrubPixelsPerFrame,
+						allowMouse:false,
+						allowTouch:true,
+						preload:false
+					});
+					const self = this;
+					rootDocument.querySelectorAll('iframe').forEach(function(frame){
+						frame.__pichomeMobileFrameScrubItem = mediaItem;
+						const install = function(){
+							try{
+								self.MobileInstallFrameScrubDocument(frame.contentDocument,frame.__pichomeMobileFrameScrubItem);
+							}catch(error){}
+						};
+						install();
+						if(frame.dataset.pichomeMobileFrameScrubBound != '1'){
+							frame.dataset.pichomeMobileFrameScrubBound = '1';
+							frame.addEventListener('load',install);
+						}
+					});
+					return true;
+				}catch(error){
+					return false;
+				}
+			},
+			MobileFrameScrubIframeLoad(event){
+				try{
+					const frame = event.currentTarget || event.target;
+					const mediaItem = {
+						id:frame.dataset.pichomeFramePath || this.path,
+						data:{rid:frame.dataset.pichomeFrameRid || ''}
+					};
+					return this.MobileInstallFrameScrubDocument(frame.contentDocument,mediaItem);
+				}catch(error){
+					return false;
+				}
+			},
 			MobileMirrorPreviewVisible(){
 				const current = this.showdata && this.showdata[this.showdataindex];
 				if(!current || current.loading || !current.data || !current.data.rid) return false;

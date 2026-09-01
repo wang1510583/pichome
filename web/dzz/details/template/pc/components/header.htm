@@ -192,7 +192,10 @@
 			return {
 				headerScales:[5,10,25,50,100,125,150,200,300,400,800],
 				FrameScrubPixelsPerFrame:(function(){
-					try{return localStorage.getItem('pichomeDesktopFrameScrubPixels') == '3' ? 3 : 7;}catch(error){return 7;}
+					try{
+						let value = localStorage.getItem('pichomeFrameScrubPixels') || localStorage.getItem('pichomeDesktopFrameScrubPixels');
+						return value == '14' || value == '3' ? 14 : 7;
+					}catch(error){return 7;}
 				})()
 			}
 		},
@@ -203,8 +206,14 @@
 			},
 			ToggleFrameScrubSensitivity(){
 				if(!this.FrameScrubSensitivityVisible()) return false;
-				this.FrameScrubPixelsPerFrame = this.FrameScrubPixelsPerFrame == 3 ? 7 : 3;
-				try{localStorage.setItem('pichomeDesktopFrameScrubPixels',String(this.FrameScrubPixelsPerFrame));}catch(error){}
+				this.FrameScrubPixelsPerFrame = this.FrameScrubPixelsPerFrame == 14 ? 7 : 14;
+				try{
+					localStorage.setItem('pichomeFrameScrubPixels',String(this.FrameScrubPixelsPerFrame));
+					localStorage.setItem('pichomeDesktopFrameScrubPixels',String(this.FrameScrubPixelsPerFrame));
+				}catch(error){}
+				if(window.PichomeFrameScrub && window.PichomeFrameScrub.setPixelsPerFrame){
+					window.PichomeFrameScrub.setPixelsPerFrame(document,this.FrameScrubPixelsPerFrame);
+				}
 				const self = this;
 				this.$nextTick(function(){self.FramePreviewInstallKeyboard();});
 				return true;

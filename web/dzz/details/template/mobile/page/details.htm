@@ -1,6 +1,7 @@
 <!--{template common/container/pc/header_start}-->
 <script src="{MOD_PATH}/template/mobile/assets/js/pinchzoom.js?{VERHASH}" type="text/javascript" charset="utf-8"></script>
 <script src="{MOD_PATH}/template/mobile/assets/js/JsCollect.js?{VERHASH}" type="text/javascript" charset="utf-8"></script>
+<script src="{MOD_PATH}/template/pc/assets/js/frame-scrub.js?{VERHASH}-mobile-frame-1" type="text/javascript" charset="utf-8"></script>
 <link rel="stylesheet" type="text/css" href="{MOD_PATH}/template/mobile/assets/css/details.css?{VERHASH}" />
 <script type="text/javascript" src="static/js/watermark.js?{VERHASH}"></script>
 <style>
@@ -83,6 +84,23 @@
 	.mobile-mirror-preview-button .mirror-preview-icon{
 		display: inline-block;
 		vertical-align: middle;
+	}
+	.mobile-frame-scrub-sensitivity-button{
+		width: 50px;
+		height: 50px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 11px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: -0.02em;
+		line-height: 1;
+		user-select: none;
+		-webkit-user-select: none;
+	}
+	.mobile-frame-scrub-sensitivity-button:active{
+		transform: scale(.94);
 	}
 </style>
 <script>

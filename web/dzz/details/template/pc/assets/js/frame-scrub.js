@@ -24,7 +24,8 @@
 	}
 
 	function normalisePixelsPerFrame(value) {
-		return parseInt(value, 10) === 3 ? 3 : DEFAULT_PIXELS_PER_FRAME;
+		var parsed = parseInt(value, 10);
+		return parsed === 14 || parsed === 3 ? 14 : DEFAULT_PIXELS_PER_FRAME;
 	}
 
 	function frameDeltaForDistance(distance, pixelsPerFrame) {
@@ -63,6 +64,7 @@
 		style.id = STYLE_ID;
 		style.textContent = [
 			'.xgplayer-skin-default.pichome-desktop-frame-host{position:relative!important;}',
+			'.xgplayer-skin-default.pichome-frame-touch-host{touch-action:pan-y!important;}',
 			'.pichome-desktop-frame-overlay{position:absolute;display:none;pointer-events:none!important;z-index:8;max-width:none!important;max-height:none!important;}',
 			'.pichome-desktop-frame-overlay.pichome-mirror-preview-target{transform:scaleX(-1)!important;transform-origin:center center!important;}',
 			'.xgplayer-skin-default.pichome-desktop-frame-scrubbing{cursor:ew-resize!important;user-select:none!important;}',
@@ -79,7 +81,10 @@
 			path: options.path === undefined || options.path === null ? '' : String(options.path),
 			endpoint: options.endpoint ? String(options.endpoint) : 'index.php?mod=details&op=fileinterface',
 			profile: options.profile ? String(options.profile) : 'mobile-hq',
-			pixelsPerFrame: normalisePixelsPerFrame(options.pixelsPerFrame)
+			pixelsPerFrame: normalisePixelsPerFrame(options.pixelsPerFrame),
+			allowMouse: options.allowMouse !== false,
+			allowTouch: options.allowTouch === true,
+			preload: options.preload !== false
 		};
 	}
 
@@ -341,7 +346,7 @@
 				atlas.manifest = manifest;
 				atlas.status = 'ready';
 				state.video.dataset.pichomeAtlasFps = String(manifest.fps || '');
-				warmAtlas(state, state.video.currentTime, 1);
+				if (state.preload || state.activated) warmAtlas(state, state.video.currentTime, 1);
 				scheduleGesturePump(state);
 			})
 			.catch(function (error) {
@@ -593,6 +598,7 @@
 
 	function activateGesture(state, gesture, event) {
 		gesture.active = true;
+		state.activated = true;
 		gesture.originTime = state.previewVisible && isFinite(state.previewTime)
 			? state.previewTime
 			: finiteNumber(state.video.currentTime, 0);
@@ -636,7 +642,14 @@
 		var previous = video.__pichomeDesktopFrameScrub;
 		if (previous && previous.signature === signature && previous.root === root && !previous.destroyed) {
 			previous.pixelsPerFrame = descriptor.pixelsPerFrame;
+			previous.allowMouse = descriptor.allowMouse;
+			previous.allowTouch = descriptor.allowTouch;
+			previous.preload = descriptor.preload;
 			previous.descriptor.pixelsPerFrame = descriptor.pixelsPerFrame;
+			previous.descriptor.allowMouse = descriptor.allowMouse;
+			previous.descriptor.allowTouch = descriptor.allowTouch;
+			previous.descriptor.preload = descriptor.preload;
+			previous.root.classList.toggle('pichome-frame-touch-host', descriptor.allowTouch);
 			return previous;
 		}
 		if (previous && previous.destroy) previous.destroy();
@@ -648,6 +661,7 @@
 		if (!win || typeof win.fetch !== 'function') return null;
 		installStyle(doc);
 		root.classList.add('pichome-desktop-frame-host');
+		root.classList.toggle('pichome-frame-touch-host', descriptor.allowTouch);
 		var state = {
 			signature: signature,
 			descriptor: descriptor,
@@ -656,6 +670,10 @@
 			document: doc,
 			window: win,
 			pixelsPerFrame: descriptor.pixelsPerFrame,
+			allowMouse: descriptor.allowMouse,
+			allowTouch: descriptor.allowTouch,
+			preload: descriptor.preload,
+			activated: false,
 			destroyed: false,
 			gesture: null,
 			commit: null,
@@ -682,10 +700,14 @@
 
 		function pointerDown(event) {
 			if (state.destroyed || state.gesture || video.readyState < 1) return;
-			if (event.button !== 0 || (event.pointerType && event.pointerType !== 'mouse')) return;
+			var pointerType = event.pointerType || 'mouse';
+			if (pointerType === 'mouse' && (!state.allowMouse || event.button !== 0)) return;
+			if (pointerType === 'touch' && (!state.allowTouch || event.isPrimary === false)) return;
+			if (pointerType !== 'mouse' && pointerType !== 'touch') return;
 			if (isInteractiveTarget(event.target, root)) return;
 			state.gesture = {
 				pointerId: event.pointerId,
+				pointerType: pointerType,
 				startX: event.clientX,
 				startY: event.clientY,
 				active: false,
@@ -704,7 +726,8 @@
 			var distanceX = event.clientX - gesture.startX;
 			var distanceY = event.clientY - gesture.startY;
 			if (!gesture.active) {
-				var moveThreshold = Math.min(MOVE_THRESHOLD, state.pixelsPerFrame);
+				var baseThreshold = gesture.pointerType === 'touch' ? 10 : MOVE_THRESHOLD;
+				var moveThreshold = Math.min(baseThreshold, state.pixelsPerFrame);
 				if (Math.abs(distanceY) >= moveThreshold && Math.abs(distanceY) > Math.abs(distanceX)) {
 					finishGesture(state, null);
 					return;
@@ -738,6 +761,7 @@
 
 		function warmCurrent() {
 			if (state.destroyed || !state.atlas.manifest || (state.gesture && state.gesture.active)) return;
+			if (!state.preload && !state.activated) return;
 			warmAtlas(state, video.currentTime, 1);
 		}
 
@@ -801,7 +825,7 @@
 			if (state.resizeObserver) state.resizeObserver.disconnect();
 			if (state.mirrorObserver) state.mirrorObserver.disconnect();
 			if (state.overlay && state.overlay.parentNode) state.overlay.parentNode.removeChild(state.overlay);
-			root.classList.remove('pichome-desktop-frame-host', 'pichome-desktop-frame-scrubbing');
+			root.classList.remove('pichome-desktop-frame-host', 'pichome-desktop-frame-scrubbing', 'pichome-frame-touch-host');
 			if (root.__pichomeDesktopFrameScrubState === state) delete root.__pichomeDesktopFrameScrubState;
 			if (video.__pichomeDesktopFrameScrub === state) delete video.__pichomeDesktopFrameScrub;
 		};
@@ -843,9 +867,29 @@
 		scanDocument(doc, options);
 	}
 
+	function setPixelsPerFrame(doc, value) {
+		var pixelsPerFrame = normalisePixelsPerFrame(value);
+		if (!doc || !doc.querySelectorAll) return pixelsPerFrame;
+		var documentState = doc.__pichomeDesktopFrameScrubDocument;
+		if (documentState && documentState.options) {
+			documentState.options.pixelsPerFrame = pixelsPerFrame;
+		}
+		doc.querySelectorAll('video').forEach(function (video) {
+			var state = video.__pichomeDesktopFrameScrub;
+			if (!state || state.destroyed) return;
+			state.pixelsPerFrame = pixelsPerFrame;
+			state.descriptor.pixelsPerFrame = pixelsPerFrame;
+		});
+		doc.querySelectorAll('iframe').forEach(function (frame) {
+			try { setPixelsPerFrame(frame.contentDocument, pixelsPerFrame); } catch (ignore) {}
+		});
+		return pixelsPerFrame;
+	}
+
 	var api = {
 		installDocument: installDocument,
 		installVideo: installVideo,
+		setPixelsPerFrame: setPixelsPerFrame,
 		__test: {
 			frameDeltaForDistance: frameDeltaForDistance,
 			normalisePixelsPerFrame: normalisePixelsPerFrame,
@@ -856,5 +900,6 @@
 	};
 
 	global.PichomeDesktopFrameScrub = api;
+	global.PichomeFrameScrub = api;
 	if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this));
