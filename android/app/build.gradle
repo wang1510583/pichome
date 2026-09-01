@@ -17,8 +17,8 @@ android {
         applicationId "top.lempet.pichome"
         minSdk 24
         targetSdk 35
-        versionCode 61
-        versionName "1.0.60"
+        versionCode 62
+        versionName "1.0.61"
         buildConfigField "String", "PICHOME_APP_ACCESS_TAG", "\"${pichomeAppAccessTag}\""
     }
 

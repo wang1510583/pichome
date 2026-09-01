@@ -6,8 +6,9 @@ if (!defined('IN_OAOOA')) {
 /**
  * Read-only, revisioned video frame atlases for the Android detail viewer.
  *
- * Each atlas covers one second. The manifest supplies the fixed sampling rate and
- * cell geometry, while the image endpoint lazily creates an immutable WebP tile.
+ * Each atlas covers a short profile-defined interval. The manifest supplies the
+ * fixed sampling rate and cell geometry, while the image endpoint lazily creates
+ * an immutable WebP tile.
  */
 function pichome_frame_atlas_json($payload, $status = 200) {
     if (!headers_sent()) {
@@ -86,10 +87,137 @@ function pichome_frame_atlas_rate($value) {
     return floatval($value);
 }
 
+function pichome_frame_atlas_profile_config($profile) {
+    switch ((string)$profile) {
+        case 'desktop-balanced':
+            return array(
+                'name' => 'desktop-balanced',
+                'version' => 6,
+                'cacheVersion' => 'frame-atlas-v6-desktop-balanced',
+                'revisionSeed' => 'frame-atlas-v6-desktop-balanced-1440-960-q88-quarter-grid4096-mem40',
+                'longEdgeLowFps' => 1440,
+                'longEdgeHighFps' => 960,
+                'quality' => 88,
+                'segmentSeconds' => 0.25,
+                'maxDecodedBytes' => 40 * 1024 * 1024
+            );
+        case 'desktop-ultra':
+            return array(
+                'name' => 'desktop-ultra',
+                'version' => 5,
+                'cacheVersion' => 'frame-atlas-v5-desktop-ultra',
+                'revisionSeed' => 'frame-atlas-v5-desktop-ultra-1920-1280-q92-quarter-grid4096-mem64',
+                'longEdgeLowFps' => 1920,
+                'longEdgeHighFps' => 1280,
+                'quality' => 92,
+                'segmentSeconds' => 0.25,
+                'maxDecodedBytes' => 64 * 1024 * 1024
+            );
+        case 'desktop-hq':
+            return array(
+                'name' => 'desktop-hq',
+                'version' => 4,
+                'cacheVersion' => 'frame-atlas-v4-desktop-hq',
+                'revisionSeed' => 'frame-atlas-v4-desktop-hq-720-512-q90-grid4096-mem64',
+                'longEdgeLowFps' => 720,
+                'longEdgeHighFps' => 512,
+                'quality' => 90,
+                'segmentSeconds' => 1,
+                'maxDecodedBytes' => 64 * 1024 * 1024
+            );
+        case 'mobile-ultra':
+            return array(
+                'name' => 'mobile-ultra',
+                'version' => 4,
+                'cacheVersion' => 'frame-atlas-v4-mobile-ultra',
+                'revisionSeed' => 'frame-atlas-v4-mobile-ultra-640-480-q90-grid4096-mem36',
+                'longEdgeLowFps' => 640,
+                'longEdgeHighFps' => 480,
+                'quality' => 90,
+                'segmentSeconds' => 1,
+                'maxDecodedBytes' => 36 * 1024 * 1024
+            );
+        case 'mobile-hq':
+            return array(
+                'name' => 'mobile-hq',
+                'version' => 3,
+                'cacheVersion' => 'frame-atlas-v3',
+                'revisionSeed' => 'frame-atlas-v3-mobile-hq',
+                'longEdgeLowFps' => 480,
+                'longEdgeHighFps' => 384,
+                'quality' => 85,
+                'segmentSeconds' => 1,
+                'maxDecodedBytes' => 0
+            );
+        default:
+            return array(
+                'name' => 'default',
+                'version' => 2,
+                'cacheVersion' => 'frame-atlas-v2',
+                'revisionSeed' => 'frame-atlas-v2',
+                'longEdgeLowFps' => 320,
+                'longEdgeHighFps' => 320,
+                'quality' => 80,
+                'segmentSeconds' => 1,
+                'maxDecodedBytes' => 0
+            );
+    }
+}
+
+function pichome_frame_atlas_grid($frameCount, $cellWidth, $cellHeight) {
+    $textureLimit = 4096;
+    $frameCount = max(1, intval($frameCount));
+    $maxColumns = max(1, intval(floor($textureLimit / max(1, $cellWidth))));
+    $maxRows = max(1, intval(floor($textureLimit / max(1, $cellHeight))));
+    $minimumColumns = max(1, intval(ceil($frameCount / $maxRows)));
+    if ($minimumColumns > $maxColumns) return false;
+    $columns = min($frameCount, max($minimumColumns, min(8, $maxColumns)));
+    $rows = intval(ceil($frameCount / $columns));
+    if ($columns * $cellWidth > $textureLimit || $rows * $cellHeight > $textureLimit) {
+        return false;
+    }
+    return array('columns' => $columns, 'rows' => $rows);
+}
+
+function pichome_frame_atlas_geometry(
+    $width,
+    $height,
+    $frameCount,
+    $desiredLongEdge,
+    $maxDecodedBytes = 0
+) {
+    $minimumLongEdge = min(320, max(2, intval($desiredLongEdge)));
+    for ($longEdge = max(2, intval($desiredLongEdge)); $longEdge >= $minimumLongEdge; $longEdge -= 2) {
+        if ($width >= $height) {
+            $cellWidth = $longEdge;
+            $cellHeight = max(2, intval(round($height * $longEdge / $width)));
+        } else {
+            $cellHeight = $longEdge;
+            $cellWidth = max(2, intval(round($width * $longEdge / $height)));
+        }
+        // Even cell sizes are friendlier to FFmpeg/WebP encoders.
+        if ($cellWidth % 2) $cellWidth++;
+        if ($cellHeight % 2) $cellHeight++;
+        $grid = pichome_frame_atlas_grid($frameCount, $cellWidth, $cellHeight);
+        $decodedBytes = $grid
+            ? $grid['columns'] * $cellWidth * $grid['rows'] * $cellHeight * 4
+            : 0;
+        if ($grid && (!$maxDecodedBytes || $decodedBytes <= $maxDecodedBytes)) {
+            return array(
+                'cellWidth' => $cellWidth,
+                'cellHeight' => $cellHeight,
+                'columns' => $grid['columns'],
+                'rows' => $grid['rows']
+            );
+        }
+    }
+    return false;
+}
+
 function pichome_frame_atlas_cache_dir($rid, $profile = 'default') {
-    $cacheVersion = $profile === 'mobile-hq' ? 'frame-atlas-v3' : 'frame-atlas-v2';
+    $profileConfig = pichome_frame_atlas_profile_config($profile);
     $directory = rtrim(getglobal('setting/attachdir'), '/\\')
-        .BS.'cache'.BS.$cacheVersion.BS.hash('sha256', (string)$rid).BS;
+        .BS.'cache'.BS.$profileConfig['cacheVersion'].BS.hash('sha256', (string)$rid).BS;
     dmkdir($directory);
     return $directory;
 }
@@ -98,12 +226,10 @@ function pichome_frame_atlas_probe($rid, $resourcesdata, $source, $profile = 'de
     $file = $source['file'];
     $size = @filesize($file);
     $mtime = @filemtime($file);
-    $atlasVersion = $profile === 'mobile-hq' ? 3 : 2;
-    $revisionSeed = $profile === 'mobile-hq'
-        ? 'frame-atlas-v3-mobile-hq'
-        : 'frame-atlas-v2';
+    $profileConfig = pichome_frame_atlas_profile_config($profile);
+    $profile = $profileConfig['name'];
     $revision = substr(hash('sha256', implode('|', array(
-        $revisionSeed,
+        $profileConfig['revisionSeed'],
         (string)$rid,
         (string)$source['relativePath'],
         (string)$size,
@@ -154,34 +280,31 @@ function pichome_frame_atlas_probe($rid, $resourcesdata, $source, $profile = 'de
         pichome_frame_atlas_error('probe_failed', '无法读取视频帧信息', 422);
     }
 
-    // A 60 fps ceiling keeps one-second atlases below common 4096px GPU texture limits.
+    // Cap sampling at 60 fps so one segment remains practical to generate and decode.
     $fps = min(60, max(1, $fps));
     $nearestIntegerRate = round($fps);
     if (abs($fps - $nearestIntegerRate) < 0.01) {
         $fps = $nearestIntegerRate;
     }
     $fps = round($fps, 6);
-    // The Android HQ profile avoids a second 192px downscale while keeping a
-    // decoded 60fps atlas within a practical WebView memory budget.
-    $longEdge = $profile === 'mobile-hq'
-        ? ($fps > 30.5 ? 384 : 480)
-        : 320;
-    if ($width >= $height) {
-        $cellWidth = $longEdge;
-        $cellHeight = max(2, intval(round($height * $longEdge / $width)));
-    } else {
-        $cellHeight = $longEdge;
-        $cellWidth = max(2, intval(round($width * $longEdge / $height)));
+    $segmentSeconds = max(0.05, floatval($profileConfig['segmentSeconds']));
+    $framesPerSegment = max(1, intval(ceil($fps * $segmentSeconds)));
+    $desiredLongEdge = $fps > 30.5
+        ? $profileConfig['longEdgeHighFps']
+        : $profileConfig['longEdgeLowFps'];
+    $geometry = pichome_frame_atlas_geometry(
+        $width,
+        $height,
+        $framesPerSegment,
+        $desiredLongEdge,
+        $profileConfig['maxDecodedBytes']
+    );
+    if (!$geometry) {
+        pichome_frame_atlas_error('atlas_geometry_failed', '无法生成兼容的帧图集尺寸', 422);
     }
-    // Even cell sizes are friendlier to FFmpeg/WebP encoders.
-    if ($cellWidth % 2) $cellWidth++;
-    if ($cellHeight % 2) $cellHeight++;
-    $framesPerSegment = max(1, intval(ceil($fps)));
-    $columns = 8;
-    $rows = intval(ceil($framesPerSegment / $columns));
     $metadata = array(
         'success' => true,
-        'version' => $atlasVersion,
+        'version' => $profileConfig['version'],
         'profile' => $profile,
         'rid' => (string)$rid,
         'revision' => $revision,
@@ -189,13 +312,13 @@ function pichome_frame_atlas_probe($rid, $resourcesdata, $source, $profile = 'de
         'fps' => $fps,
         'sourceWidth' => $width,
         'sourceHeight' => $height,
-        'cellWidth' => $cellWidth,
-        'cellHeight' => $cellHeight,
-        'columns' => $columns,
-        'rows' => $rows,
+        'cellWidth' => $geometry['cellWidth'],
+        'cellHeight' => $geometry['cellHeight'],
+        'columns' => $geometry['columns'],
+        'rows' => $geometry['rows'],
         'framesPerSegment' => $framesPerSegment,
-        'segmentSeconds' => 1,
-        'maxSegment' => max(0, intval(ceil($duration)) - 1)
+        'segmentSeconds' => $segmentSeconds,
+        'maxSegment' => max(0, intval(ceil($duration / $segmentSeconds)) - 1)
     );
     $temporary = $metadataFile.'.'.strtolower(random(8)).'.tmp';
     if (@file_put_contents($temporary, json_encode($metadata), LOCK_EX) !== false) {
@@ -212,6 +335,7 @@ function pichome_frame_atlas_serve_manifest($metadata) {
 }
 
 function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'default') {
+    $profileConfig = pichome_frame_atlas_profile_config($profile);
     $revision = isset($_GET['revision']) ? trim($_GET['revision']) : '';
     if (!$revision || !hash_equals($metadata['revision'], $revision)) {
         pichome_frame_atlas_error('revision_changed', '视频版本已变化，请重新获取帧图集信息', 409);
@@ -220,7 +344,14 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'd
     if ($second < 0 || $second > $metadata['maxSegment']) {
         pichome_frame_atlas_error('invalid_segment', '帧图集分段超出视频范围', 416);
     }
-    $segmentDuration = min(1, max(0, $metadata['duration'] - $second));
+    $segmentSeconds = !empty($metadata['segmentSeconds'])
+        ? max(0.05, floatval($metadata['segmentSeconds']))
+        : 1;
+    $segmentStart = $second * $segmentSeconds;
+    $segmentDuration = min(
+        $segmentSeconds,
+        max(0, $metadata['duration'] - $segmentStart)
+    );
     $frameCount = max(1, min(
         $metadata['framesPerSegment'],
         intval(ceil($segmentDuration * $metadata['fps']))
@@ -252,12 +383,12 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'd
                     : '')
                 .escapeshellarg($ffmpeg)
                 .' -hide_banner -loglevel error -y'
-                .' -ss '.escapeshellarg(number_format($second, 6, '.', ''))
+                .' -ss '.escapeshellarg(number_format($segmentStart, 6, '.', ''))
                 .' -i '.escapeshellarg($source['file'])
                 .' -t '.escapeshellarg(number_format($segmentDuration, 6, '.', ''))
                 .' -an -sn -vf '.escapeshellarg($filter)
                 .' -frames:v 1 -c:v libwebp -quality '
-                .($profile === 'mobile-hq' ? '85' : '80').' '.escapeshellarg($temporary);
+                .$profileConfig['quality'].' '.escapeshellarg($temporary);
             $output = array();
             $status = 1;
             @exec($command.' 2>&1', $output, $status);
@@ -312,9 +443,9 @@ function pichome_frame_atlas_handle($operation, $rid, $resourcesdata, $appdata) 
     if (!$source) {
         pichome_frame_atlas_error('source_unavailable', '视频源文件不可读取', 404);
     }
-    $profile = isset($_GET['profile']) && $_GET['profile'] === 'mobile-hq'
-        ? 'mobile-hq'
-        : 'default';
+    $requestedProfile = isset($_GET['profile']) ? (string)$_GET['profile'] : 'default';
+    $profileConfig = pichome_frame_atlas_profile_config($requestedProfile);
+    $profile = $profileConfig['name'];
     $metadata = pichome_frame_atlas_probe($rid, $resourcesdata, $source, $profile);
     if ($operation === 'frameAtlasManifest') {
         pichome_frame_atlas_serve_manifest($metadata);

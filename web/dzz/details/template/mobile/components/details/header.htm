@@ -82,11 +82,12 @@
 						rid:data.rid,
 						path:mediaItem.id || data.dpath || this.path,
 						endpoint:MOD_URL+'&op=fileinterface',
-						profile:'mobile-hq',
+						profile:'mobile-ultra',
 						pixelsPerFrame:this.MobileFrameScrubPixelsPerFrame,
 						allowMouse:false,
 						allowTouch:true,
-						preload:false
+						preload:false,
+						trackPlayback:false
 					});
 					const self = this;
 					rootDocument.querySelectorAll('iframe').forEach(function(frame){

@@ -39,6 +39,22 @@
 		return 1 / Math.max(1, finiteNumber(fps, 30));
 	}
 
+	function atlasSegmentSeconds(manifest) {
+		return Math.max(0.05, finiteNumber(manifest && manifest.segmentSeconds, 1));
+	}
+
+	function atlasSegmentIndex(manifest, time) {
+		var maximum = Math.max(0, parseInt(manifest && manifest.maxSegment, 10) || 0);
+		return Math.max(0, Math.min(
+			maximum,
+			Math.floor(Math.max(0, finiteNumber(time, 0)) / atlasSegmentSeconds(manifest))
+		));
+	}
+
+	function atlasSegmentStart(manifest, index) {
+		return Math.max(0, finiteNumber(index, 0)) * atlasSegmentSeconds(manifest);
+	}
+
 	function clampTime(video, value) {
 		var duration = finiteNumber(video && video.duration, 0);
 		var maximum = duration > 0
@@ -84,7 +100,8 @@
 			pixelsPerFrame: normalisePixelsPerFrame(options.pixelsPerFrame),
 			allowMouse: options.allowMouse !== false,
 			allowTouch: options.allowTouch === true,
-			preload: options.preload !== false
+			preload: options.preload !== false,
+			trackPlayback: options.trackPlayback !== false
 		};
 	}
 
@@ -307,10 +324,7 @@
 		var atlas = state.atlas;
 		var manifest = atlas.manifest;
 		if (!manifest || state.destroyed) return;
-		var center = Math.max(0, Math.min(
-			parseInt(manifest.maxSegment, 10) || 0,
-			Math.floor(Math.max(0, finiteNumber(time, 0)))
-		));
+		var center = atlasSegmentIndex(manifest, time);
 		atlas.center = center;
 		var allowed = {};
 		[center - 1, center, center + 1].forEach(function (second) {
@@ -418,7 +432,9 @@
 		var duration = finiteNumber(manifest.duration, finiteNumber(state.video.duration, 0));
 		target = Math.max(0, Math.min(Math.max(0, duration - 0.000001), target));
 		var fps = Math.max(1, finiteNumber(manifest.fps, 30));
-		var second = Math.max(0, Math.min(manifest.maxSegment, Math.floor(target)));
+		var segmentSeconds = atlasSegmentSeconds(manifest);
+		var second = atlasSegmentIndex(manifest, target);
+		var segmentStart = atlasSegmentStart(manifest, second);
 		warmAtlas(state, target, target < state.video.currentTime ? -1 : 1);
 		var entry = requestSegment(state, second, true);
 		if (!entry || entry.status !== 'ready' || !entry.image || !entry.image.naturalWidth) {
@@ -427,14 +443,14 @@
 			}
 			return 'pending';
 		}
-		var segmentDuration = Math.min(1, Math.max(0, duration - second));
+		var segmentDuration = Math.min(segmentSeconds, Math.max(0, duration - segmentStart));
 		var frameCount = Math.max(1, Math.min(
 			parseInt(manifest.framesPerSegment, 10) || Math.ceil(fps),
 			Math.ceil(segmentDuration * fps)
 		));
 		var index = Math.max(0, Math.min(
 			frameCount - 1,
-			Math.floor((target - second) * fps + 0.0001)
+			Math.floor((target - segmentStart) * fps + 0.0001)
 		));
 		var overlay = ensureOverlay(state);
 		if (!overlay) return 'failed';
@@ -455,7 +471,7 @@
 			);
 			overlay.style.display = 'block';
 			state.previewVisible = true;
-			state.previewTime = Math.min(duration, second + index / fps);
+			state.previewTime = Math.min(duration, segmentStart + index / fps);
 			state.previewFps = fps;
 			state.previewSecond = second;
 			state.previewIndex = index;
@@ -645,10 +661,12 @@
 			previous.allowMouse = descriptor.allowMouse;
 			previous.allowTouch = descriptor.allowTouch;
 			previous.preload = descriptor.preload;
+			previous.trackPlayback = descriptor.trackPlayback;
 			previous.descriptor.pixelsPerFrame = descriptor.pixelsPerFrame;
 			previous.descriptor.allowMouse = descriptor.allowMouse;
 			previous.descriptor.allowTouch = descriptor.allowTouch;
 			previous.descriptor.preload = descriptor.preload;
+			previous.descriptor.trackPlayback = descriptor.trackPlayback;
 			previous.root.classList.toggle('pichome-frame-touch-host', descriptor.allowTouch);
 			return previous;
 		}
@@ -673,6 +691,7 @@
 			allowMouse: descriptor.allowMouse,
 			allowTouch: descriptor.allowTouch,
 			preload: descriptor.preload,
+			trackPlayback: descriptor.trackPlayback,
 			activated: false,
 			destroyed: false,
 			gesture: null,
@@ -761,6 +780,7 @@
 
 		function warmCurrent() {
 			if (state.destroyed || !state.atlas.manifest || (state.gesture && state.gesture.active)) return;
+			if (!state.trackPlayback) return;
 			if (!state.preload && !state.activated) return;
 			warmAtlas(state, video.currentTime, 1);
 		}
@@ -894,6 +914,9 @@
 			frameDeltaForDistance: frameDeltaForDistance,
 			normalisePixelsPerFrame: normalisePixelsPerFrame,
 			frameDuration: frameDuration,
+			atlasSegmentSeconds: atlasSegmentSeconds,
+			atlasSegmentIndex: atlasSegmentIndex,
+			atlasSegmentStart: atlasSegmentStart,
 			commitSeekTime: commitSeekTime,
 			presentedFrameMatches: presentedFrameMatches
 		}
