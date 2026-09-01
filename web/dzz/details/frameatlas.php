@@ -86,19 +86,24 @@ function pichome_frame_atlas_rate($value) {
     return floatval($value);
 }
 
-function pichome_frame_atlas_cache_dir($rid) {
+function pichome_frame_atlas_cache_dir($rid, $profile = 'default') {
+    $cacheVersion = $profile === 'mobile-hq' ? 'frame-atlas-v3' : 'frame-atlas-v2';
     $directory = rtrim(getglobal('setting/attachdir'), '/\\')
-        .BS.'cache'.BS.'frame-atlas-v2'.BS.hash('sha256', (string)$rid).BS;
+        .BS.'cache'.BS.$cacheVersion.BS.hash('sha256', (string)$rid).BS;
     dmkdir($directory);
     return $directory;
 }
 
-function pichome_frame_atlas_probe($rid, $resourcesdata, $source) {
+function pichome_frame_atlas_probe($rid, $resourcesdata, $source, $profile = 'default') {
     $file = $source['file'];
     $size = @filesize($file);
     $mtime = @filemtime($file);
+    $atlasVersion = $profile === 'mobile-hq' ? 3 : 2;
+    $revisionSeed = $profile === 'mobile-hq'
+        ? 'frame-atlas-v3-mobile-hq'
+        : 'frame-atlas-v2';
     $revision = substr(hash('sha256', implode('|', array(
-        'frame-atlas-v2',
+        $revisionSeed,
         (string)$rid,
         (string)$source['relativePath'],
         (string)$size,
@@ -106,7 +111,7 @@ function pichome_frame_atlas_probe($rid, $resourcesdata, $source) {
         isset($resourcesdata['md5']) ? (string)$resourcesdata['md5'] : '',
         isset($resourcesdata['mtime']) ? (string)$resourcesdata['mtime'] : ''
     ))), 0, 24);
-    $directory = pichome_frame_atlas_cache_dir($rid);
+    $directory = pichome_frame_atlas_cache_dir($rid, $profile);
     $metadataFile = $directory.'manifest-'.$revision.'.json';
     if (is_file($metadataFile)) {
         $cached = json_decode(@file_get_contents($metadataFile), true);
@@ -156,7 +161,11 @@ function pichome_frame_atlas_probe($rid, $resourcesdata, $source) {
         $fps = $nearestIntegerRate;
     }
     $fps = round($fps, 6);
-    $longEdge = 320;
+    // The Android HQ profile avoids a second 192px downscale while keeping a
+    // decoded 60fps atlas within a practical WebView memory budget.
+    $longEdge = $profile === 'mobile-hq'
+        ? ($fps > 30.5 ? 384 : 480)
+        : 320;
     if ($width >= $height) {
         $cellWidth = $longEdge;
         $cellHeight = max(2, intval(round($height * $longEdge / $width)));
@@ -172,7 +181,8 @@ function pichome_frame_atlas_probe($rid, $resourcesdata, $source) {
     $rows = intval(ceil($framesPerSegment / $columns));
     $metadata = array(
         'success' => true,
-        'version' => 2,
+        'version' => $atlasVersion,
+        'profile' => $profile,
         'rid' => (string)$rid,
         'revision' => $revision,
         'duration' => round($duration, 6),
@@ -201,7 +211,7 @@ function pichome_frame_atlas_serve_manifest($metadata) {
     pichome_frame_atlas_json($metadata);
 }
 
-function pichome_frame_atlas_serve_image($rid, $source, $metadata) {
+function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'default') {
     $revision = isset($_GET['revision']) ? trim($_GET['revision']) : '';
     if (!$revision || !hash_equals($metadata['revision'], $revision)) {
         pichome_frame_atlas_error('revision_changed', '视频版本已变化，请重新获取帧图集信息', 409);
@@ -216,7 +226,7 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata) {
         intval(ceil($segmentDuration * $metadata['fps']))
     ));
     $rows = intval(ceil($frameCount / $metadata['columns']));
-    $directory = pichome_frame_atlas_cache_dir($rid);
+    $directory = pichome_frame_atlas_cache_dir($rid, $profile);
     $atlasFile = $directory.'atlas-'.$metadata['revision'].'-'.$second.'.webp';
     if (!is_file($atlasFile) || filesize($atlasFile) < 32) {
         $lockFile = $atlasFile.'.lock';
@@ -246,7 +256,8 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata) {
                 .' -i '.escapeshellarg($source['file'])
                 .' -t '.escapeshellarg(number_format($segmentDuration, 6, '.', ''))
                 .' -an -sn -vf '.escapeshellarg($filter)
-                .' -frames:v 1 -c:v libwebp -quality 80 '.escapeshellarg($temporary);
+                .' -frames:v 1 -c:v libwebp -quality '
+                .($profile === 'mobile-hq' ? '85' : '80').' '.escapeshellarg($temporary);
             $output = array();
             $status = 1;
             @exec($command.' 2>&1', $output, $status);
@@ -301,9 +312,12 @@ function pichome_frame_atlas_handle($operation, $rid, $resourcesdata, $appdata) 
     if (!$source) {
         pichome_frame_atlas_error('source_unavailable', '视频源文件不可读取', 404);
     }
-    $metadata = pichome_frame_atlas_probe($rid, $resourcesdata, $source);
+    $profile = isset($_GET['profile']) && $_GET['profile'] === 'mobile-hq'
+        ? 'mobile-hq'
+        : 'default';
+    $metadata = pichome_frame_atlas_probe($rid, $resourcesdata, $source, $profile);
     if ($operation === 'frameAtlasManifest') {
         pichome_frame_atlas_serve_manifest($metadata);
     }
-    pichome_frame_atlas_serve_image($rid, $source, $metadata);
+    pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile);
 }
