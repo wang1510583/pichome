@@ -51,6 +51,8 @@ public class MainActivity extends Activity {
     private View fullscreenView;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private int requestedOrientationBeforeFullscreen = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+    private boolean customVideoFullscreen;
+    private int requestedOrientationBeforeCustomFullscreen = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
     private Object backInvokedCallback;
     private MediaDiskCache mediaDiskCache;
     private AlertDialog cacheDialog;
@@ -200,7 +202,8 @@ public class MainActivity extends Activity {
 
     private void installSystemBarInsets() {
         root.setOnApplyWindowInsetsListener((view, insets) -> {
-            if (fullscreenView != null) {
+            if (fullscreenView != null || customVideoFullscreen) {
+                view.setPadding(0, 0, 0, 0);
                 return insets;
             }
             int left;
@@ -403,6 +406,9 @@ public class MainActivity extends Activity {
                 callback.onCustomViewHidden();
                 return;
             }
+            if (customVideoFullscreen) {
+                setCustomVideoFullscreen(false);
+            }
             fullscreenView = view;
             fullscreenCallback = callback;
             requestedOrientationBeforeFullscreen = getRequestedOrientation();
@@ -473,6 +479,20 @@ public class MainActivity extends Activity {
                 + ".pichome-video-commandbar button[data-pichome-action=play]{font-size:0;}"
                 + ".pichome-video-commandbar button[data-pichome-action=play]::before{content:\"\";display:block;width:22px;height:22px;background:currentColor;clip-path:polygon(23% 10%,23% 90%,88% 50%);}"
                 + ".pichome-video-commandbar button[data-pichome-action=play][aria-label=\"暂停视频\"]::before{width:20px;height:20px;background:linear-gradient(to right,currentColor 0 36%,transparent 36% 64%,currentColor 64% 100%);clip-path:none;}"
+                + "html.pichome-custom-video-fullscreen-root,html.pichome-custom-video-fullscreen-root body{overflow:hidden!important;overscroll-behavior:none!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen{position:fixed!important;inset:0!important;z-index:2147482500!important;width:100vw!important;height:100dvh!important;padding:0!important;align-items:stretch!important;justify-content:stretch!important;background:#000!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .Details-Iframe-wrapper{position:absolute!important;inset:0!important;display:block!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;box-shadow:none!important;transition:none!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .Details-Iframe-wrapper>iframe{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border-radius:0!important;transition:none!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .pichome-frame-scrub-pad{left:0!important;right:0!important;top:0!important;bottom:108px!important;height:auto!important;z-index:10003!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .pichome-video-timeline{left:0!important;right:0!important;bottom:54px!important;z-index:10006!important;height:48px!important;padding:0 max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left))!important;background:linear-gradient(to top,rgba(10,10,12,.9),rgba(25,25,28,.72))!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .pichome-video-commandbar{left:126px!important;right:max(8px,env(safe-area-inset-right))!important;bottom:6px!important;z-index:10007!important;height:44px!important;padding:0!important;justify-content:flex-end!important;gap:6px!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .pichome-video-commandbar button{flex:0 1 60px!important;width:60px!important;max-width:60px!important;height:40px!important;border-radius:12px!important;background:rgba(28,29,33,.9)!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .pichome-video-commandbar button[data-pichome-action=fullscreen]{font-size:0!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .pichome-video-commandbar button[data-pichome-action=fullscreen]::after{content:\"退出\";font:600 14px/1 system-ui,sans-serif;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .pichome-detail-nav{left:max(8px,env(safe-area-inset-left))!important;bottom:6px!important;z-index:10008!important;gap:6px!important;transform:none!important;}"
+                + ".Details-Iframe.pichome-custom-video-fullscreen .pichome-detail-nav button{width:52px!important;max-width:52px!important;height:40px!important;border-radius:12px!important;font-size:22px!important;background:rgba(28,29,33,.9)!important;}"
+                + "html.pichome-custom-video-fullscreen-doc .detail-popup{--apk-header-h:0px;--apk-footer-h:0px;--apk-album-h:0px;padding:0!important;background:#000!important;}"
+                + "html.pichome-custom-video-fullscreen-doc .detail-popup .header-top,html.pichome-custom-video-fullscreen-doc .detail-popup .footer-tabbar,html.pichome-custom-video-fullscreen-doc .detail-popup .album-imglist{display:none!important;}"
                 + "@media(prefers-reduced-motion:reduce){.Details-Iframe .Details-Iframe-wrapper,.Details-Iframe .Details-Iframe-wrapper>iframe{transition:none!important;}}"
                 + "html,body,#dzzoffice{min-height:100%!important;}"
                 + ".detail-popup{--apk-header-h:50px;--apk-footer-h:60px;--apk-album-h:0px;height:100dvh!important;max-height:100%!important;padding:var(--apk-header-h) 0 calc(var(--apk-footer-h) + var(--apk-album-h))!important;box-sizing:border-box!important;}"
@@ -551,6 +571,12 @@ public class MainActivity extends Activity {
                 + "function trackFrameDuration(video){if(!video||typeof video.requestVideoFrameCallback!=='function'||video.dataset.pichomeFrameTracker)return;video.dataset.pichomeFrameTracker='1';var previousTime=-1,previousFrames=-1,normalBefore=false,samples=[];function sample(now,metadata){var mediaTime=metadata&&metadata.mediaTime,presentedFrames=metadata&&metadata.presentedFrames,normal=isFinite(mediaTime)&&video.dataset.pichomeFrameMode!=='1'&&!video.seeking;if(normal&&normalBefore&&previousTime>=0&&mediaTime>previousTime){var frameCount=isFinite(presentedFrames)&&isFinite(previousFrames)&&presentedFrames>previousFrames?presentedFrames-previousFrames:1,duration=(mediaTime-previousTime)/frameCount;if(duration>=1/240&&duration<=1){samples.push(duration);if(samples.length>12)samples.shift();var sorted=samples.slice().sort(function(a,b){return a-b;}),middle=sorted[Math.floor(sorted.length/2)];video.dataset.pichomeFrameDuration=String(middle);}}if(normal){try{captureFramePreview(video,mediaTime,presentedFrames);}catch(ignore){}video.dataset.pichomeFrameTarget=String(mediaTime);}if(isFinite(mediaTime))updateFrameTimeline(video,mediaTime);normalBefore=normal;if(isFinite(mediaTime))previousTime=mediaTime;if(isFinite(presentedFrames))previousFrames=presentedFrames;video.requestVideoFrameCallback(sample);}video.addEventListener('loadedmetadata',function(){resetFramePreviewCache(video);previousTime=-1;previousFrames=-1;normalBefore=false;samples=[];});video.requestVideoFrameCallback(sample);}"
                 + "function detailFrameRate(frame,video){var measured=parseFloat(video.dataset.pichomeFrameDuration);if(isFinite(measured)&&measured>0)return 1/measured;var rate=parseFrameRate(video.getAttribute('data-fps')||video.dataset.fps||video.dataset.frameRate);if(rate)return rate;try{var vm=detailVm(frame),data=vm&&vm.showdata&&vm.showdata[vm.showdataindex]&&vm.showdata[vm.showdataindex].data;rate=parseFrameRate(data&&(data.fps||data.frame_rate||data.framerate));}catch(ignore){}return rate||30;}";
         script += new String("")
+                + "function setCustomFullscreenDocuments(frame,enabled){function visit(doc){try{if(!doc||!doc.documentElement)return;doc.documentElement.classList.toggle('pichome-custom-video-fullscreen-doc',!!enabled);doc.querySelectorAll('iframe').forEach(function(child){try{visit(child.contentDocument);}catch(ignore){}});}catch(ignore){}}try{visit(frame&&frame.contentDocument);}catch(ignore){}}"
+                + "function syncCustomFullscreenButton(overlay,enabled){try{var button=overlay&&overlay.querySelector('[data-pichome-action=fullscreen]');if(!button)return;button.textContent=enabled?'退出':'全屏';button.setAttribute('aria-label',enabled?'退出全屏':'进入全屏');}catch(ignore){}}"
+                + "function notifyCustomVideoFullscreen(enabled){try{if(window.PichomeCache&&typeof window.PichomeCache.setCustomVideoFullscreen==='function')window.PichomeCache.setCustomVideoFullscreen(!!enabled);}catch(ignore){}}"
+                + "function refreshCustomVideoFullscreenLayout(state,enabled){if(!state)return;var frame=state.frame,overlay=state.overlay;if(frame){try{var vm=detailVm(frame);if(vm)vm.full=!!enabled;}catch(ignore){}try{fitDetailDialog(frame);}catch(ignore){}try{updateFrameControls(frame);}catch(ignore){}try{var video=currentDetailVideo(frame),cache=video&&video.__pichomeFrameCache;if(cache&&cache.visible&&cache.overlay)ensureFramePreviewOverlay(video,cache,cache.overlay.width,cache.overlay.height);}catch(ignore){}}syncCustomFullscreenButton(overlay,enabled);}"
+                + "function exitCustomVideoFullscreen(){var state=window.__pichomeCustomVideoFullscreenState;if(!state)return false;window.__pichomeCustomVideoFullscreenState=null;if(state.observer)try{state.observer.disconnect();}catch(ignore){}try{state.overlay.classList.remove('pichome-custom-video-fullscreen');}catch(ignore){}document.documentElement.classList.remove('pichome-custom-video-fullscreen-root');setCustomFullscreenDocuments(state.frame,false);refreshCustomVideoFullscreenLayout(state,false);notifyCustomVideoFullscreen(false);[80,260,520].forEach(function(delay){setTimeout(function(){refreshCustomVideoFullscreenLayout(state,false);},delay);});return true;}"
+                + "function requestCustomVideoFullscreen(frame,event){if(event){event.preventDefault();event.stopImmediatePropagation();}var active=window.__pichomeCustomVideoFullscreenState;if(active){exitCustomVideoFullscreen();return;}var overlay=frame&&frame.closest&&frame.closest('.Details-Iframe'),video=currentDetailVideo(frame);if(!overlay||!video)return;var state={overlay:overlay,frame:frame,video:video,observer:null};window.__pichomeCustomVideoFullscreenState=state;overlay.classList.add('pichome-custom-video-fullscreen');document.documentElement.classList.add('pichome-custom-video-fullscreen-root');setCustomFullscreenDocuments(frame,true);video.playsInline=true;video.controls=false;video.removeAttribute('controls');refreshCustomVideoFullscreenLayout(state,true);try{state.observer=new MutationObserver(function(){if(!document.documentElement.contains(overlay))exitCustomVideoFullscreen();});state.observer.observe(document.documentElement,{childList:true,subtree:true});}catch(ignore){}notifyCustomVideoFullscreen(true);[60,180,420].forEach(function(delay){setTimeout(function(){if(window.__pichomeCustomVideoFullscreenState===state)refreshCustomVideoFullscreenLayout(state,true);},delay);});}"
                 + "function frameAtlasVideoIdentity(video){var identity={rid:'',path:''};try{var win=video&&video.ownerDocument&&video.ownerDocument.defaultView;while(win&&win.frameElement){var host=win.frameElement,raw=host.getAttribute('src')||host.src||'';try{var parsed=new URL(raw,host.ownerDocument.baseURI),rid=parsed.searchParams.get('pichome_rid'),path=parsed.searchParams.get('path');if(rid&&!identity.rid)identity.rid=rid;if(path&&!identity.path)identity.path=path;}catch(ignore){}win=host.ownerDocument&&host.ownerDocument.defaultView;}}catch(ignore){}return identity;}"
                 + "function frameAtlasDescriptor(frame,video){try{var vm=detailVm(frame),data=vm&&vm.showdata&&vm.showdata[vm.showdataindex]&&vm.showdata[vm.showdataindex].data,identity=frameAtlasVideoIdentity(video),rid=data&&data.rid||identity.rid,path=data&&data.dpath||vm&&vm.path||identity.path||sessionStorage.getItem('detailpath');if(!rid||!path)return null;var url=new URL('index.php',window.location.href);url.searchParams.set('mod','details');url.searchParams.set('op','fileinterface');url.searchParams.set('operation','frameAtlasManifest');url.searchParams.set('profile','mobile-ultra');url.searchParams.set('path',String(path));return{rid:String(rid),path:String(path),manifestUrl:url.href};}catch(ignore){return null;}}"
                 + "function frameAtlasBridge(){try{return window.PichomeCache||null;}catch(ignore){return null;}}"
@@ -607,8 +633,8 @@ public class MainActivity extends Activity {
                 + "}"
                 + "function fitDetailDialog(frame){"
                 + "if(!frame||!frame.closest)return;var wrapper=frame.closest('.Details-Iframe-wrapper');if(!wrapper)return;"
-                + "var vm=detailVm(frame),data=null;if(vm){vm.full=false;if(!frame.dataset.pichomeAndroidWindowed){"
-                + "try{vm.MainFulloverlay=function(){vm.full=false;};frame.dataset.pichomeAndroidWindowed='1';}catch(ignore){}}"
+                + "var overlay=wrapper.closest('.Details-Iframe'),customFullscreen=!!(overlay&&overlay.classList.contains('pichome-custom-video-fullscreen'));var vm=detailVm(frame),data=null;if(vm){vm.full=customFullscreen;if(!frame.dataset.pichomeAndroidWindowed){"
+                + "try{vm.MainFulloverlay=function(){var host=frame.closest&&frame.closest('.Details-Iframe');vm.full=!!(host&&host.classList.contains('pichome-custom-video-fullscreen'));};frame.dataset.pichomeAndroidWindowed='1';}catch(ignore){}}"
                 + "data=vm.showdata&&vm.showdata[vm.showdataindex]&&vm.showdata[vm.showdataindex].data;}"
                 + "var mediaWidth=data&&parseFloat(data.width),mediaHeight=data&&parseFloat(data.height);"
                 + "if(!(mediaWidth>0&&mediaHeight>0)){try{var img=frame.contentDocument.querySelector('.detail-popup-content.center .image-viewer__img.max');"
@@ -701,6 +727,8 @@ public class MainActivity extends Activity {
                 + "document.addEventListener('touchcancel',touchCancel,{passive:true});"
                 + "}"
                 + "function safeInstall(name,fn){try{fn();}catch(error){try{console.error('[PichomeAndroid] '+name,error);}catch(ignore){}}}"
+                + "requestNativeVideoFullscreen=requestCustomVideoFullscreen;window.__pichomeExitCustomVideoFullscreen=exitCustomVideoFullscreen;"
+                + "if(!window.__pichomeCustomFullscreenResizeBound){window.__pichomeCustomFullscreenResizeBound=true;window.addEventListener('resize',function(){var state=window.__pichomeCustomVideoFullscreenState;if(state)requestAnimationFrame(function(){refreshCustomVideoFullscreenLayout(state,true);});},{passive:true});}"
                 + "function installAll(){safeInstall('media',function(){installMediaCss(document);});safeInstall('frames',function(){installFrameCss(document);});safeInstall('downloads',function(){hideDownloads(document);});safeInstall('cache-menu',function(){installCacheMenuItem(document);});safeInstall('detail-open',installExactDetailOpen);safeInstall('sidebars',installSidebarGestures);}"
                 + "installAll();[200,700,1600,3200].forEach(function(delay){setTimeout(installAll,delay);});"
                 + "if(window.__pichomeAndroidDownloadObserver){window.__pichomeAndroidDownloadObserver.disconnect();}"
@@ -756,6 +784,65 @@ public class MainActivity extends Activity {
                         Toast.LENGTH_LONG
                 ).show());
             }
+        }
+
+        @JavascriptInterface
+        public void setCustomVideoFullscreen(boolean enabled) {
+            runOnUiThread(() -> MainActivity.this.setCustomVideoFullscreen(enabled));
+        }
+    }
+
+    private void setCustomVideoFullscreen(boolean enabled) {
+        if (customVideoFullscreen == enabled) {
+            if (enabled) applyCustomFullscreenSystemUi();
+            return;
+        }
+        if (enabled) {
+            if (fullscreenView != null) hideFullscreenVideo();
+            requestedOrientationBeforeCustomFullscreen = getRequestedOrientation();
+            customVideoFullscreen = true;
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            if (root != null) root.setPadding(0, 0, 0, 0);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            applyCustomFullscreenSystemUi();
+            if (root != null) root.requestApplyInsets();
+            return;
+        }
+
+        customVideoFullscreen = false;
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        configureWindow();
+        applyPhysicalEdgeGestureMode();
+        if (root != null) root.requestApplyInsets();
+        int restoreOrientation = requestedOrientationBeforeCustomFullscreen;
+        requestedOrientationBeforeCustomFullscreen = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+        setRequestedOrientation(restoreOrientation);
+    }
+
+    private void applyCustomFullscreenSystemUi() {
+        Window window = getWindow();
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                window.setDecorFitsSystemWindows(false);
+                android.view.WindowInsetsController controller = window.getInsetsController();
+                if (controller != null) {
+                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                    controller.setSystemBarsBehavior(
+                            android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    );
+                }
+            } else {
+                window.getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                );
+            }
+        } catch (RuntimeException error) {
+            Log.w("PichomeFullscreen", "Unable to apply immersive custom fullscreen", error);
         }
     }
 
@@ -881,6 +968,15 @@ public class MainActivity extends Activity {
             return;
         }
         if (webView == null) return;
+        if (customVideoFullscreen) {
+            webView.evaluateJavascript(
+                    "(function(){try{return !!(window.__pichomeExitCustomVideoFullscreen&&window.__pichomeExitCustomVideoFullscreen());}catch(ignore){return false;}})();",
+                    result -> {
+                        if (!"true".equals(result)) setCustomVideoFullscreen(false);
+                    }
+            );
+            return;
+        }
         String closeOverlayScript = "(function(){"
                 + "var mask=document.querySelector('.mobile-sidebar-mask');"
                 + "if(mask){mask.click();return true;}"
@@ -927,7 +1023,9 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         webView.onResume();
-        if (fullscreenView == null && root != null) {
+        if (customVideoFullscreen) {
+            applyCustomFullscreenSystemUi();
+        } else if (fullscreenView == null && root != null) {
             applyPhysicalEdgeGestureMode();
             if (android.os.Build.VERSION.SDK_INT >= 29 && root != null) {
                 root.post(this::updateSystemGestureExclusion);
@@ -938,7 +1036,9 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && fullscreenView == null && root != null) {
+        if (hasFocus && customVideoFullscreen) {
+            applyCustomFullscreenSystemUi();
+        } else if (hasFocus && fullscreenView == null && root != null) {
             applyPhysicalEdgeGestureMode();
             if (android.os.Build.VERSION.SDK_INT >= 29 && root != null) {
                 root.post(this::updateSystemGestureExclusion);
