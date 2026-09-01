@@ -4,6 +4,7 @@
 <link rel="stylesheet" type="text/css" href="{MOD_PATH}/template/pc/assets/css/xuanzhuan/index.css?{VERHASH}"/>
 <script type="text/javascript" src="static/vue_components/collectdialog/index.js?{VERHASH}"></script>
 <script type="text/javascript" src="{MOD_PATH}/template/pc/assets/js//tag.js?{VERHASH}"></script>
+<script type="text/javascript" src="{MOD_PATH}/template/pc/assets/js/frame-scrub.js?{VERHASH}-desktop-frame-2"></script>
 <script type="text/javascript" src="static/js/watermark.js?{VERHASH}"></script>
 <script>
 	function CopyTxt(item,text){
@@ -429,6 +430,14 @@
 				const root = rootDocument || document;
 				try{
 					self.FramePreviewHideCenterControl(root);
+					if(window.PichomeDesktopFrameScrub && window.PichomeDesktopFrameScrub.installDocument){
+						window.PichomeDesktopFrameScrub.installDocument(root,{
+							rid:self.imagesData && self.imagesData.rid,
+							path:self.path || (self.imagesData && self.imagesData.dpath),
+							endpoint:MOD_URL+'&op=fileinterface',
+							profile:'mobile-hq'
+						});
+					}
 					root.querySelectorAll('iframe').forEach(function(frame){
 						const attach = function(){
 							try{
