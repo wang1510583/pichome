@@ -32,4 +32,6 @@ $lang = array (
 	'video_cover_save_failed'=>'封面图保存失败',
 	'video_cover_set_failed'=>'设置封面图失败',
 	'video_cover_set_success'=>'当前视频帧已设置为封面图',
+	'frame_scrub_sensitivity'=>'逐帧拖动灵敏度',
+	'frame_scrub_switch'=>'点击切换',
 );

@@ -4,7 +4,7 @@
 <link rel="stylesheet" type="text/css" href="{MOD_PATH}/template/pc/assets/css/xuanzhuan/index.css?{VERHASH}"/>
 <script type="text/javascript" src="static/vue_components/collectdialog/index.js?{VERHASH}"></script>
 <script type="text/javascript" src="{MOD_PATH}/template/pc/assets/js//tag.js?{VERHASH}"></script>
-<script type="text/javascript" src="{MOD_PATH}/template/pc/assets/js/frame-scrub.js?{VERHASH}-desktop-frame-2"></script>
+<script type="text/javascript" src="{MOD_PATH}/template/pc/assets/js/frame-scrub.js?{VERHASH}-desktop-frame-3"></script>
 <script type="text/javascript" src="static/js/watermark.js?{VERHASH}"></script>
 <script>
 	function CopyTxt(item,text){
@@ -35,6 +35,19 @@
 	}
 	#top_header .mirror-preview-icon{
 		display: block;
+	}
+	#top_header .frame-scrub-sensitivity-button{
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 11px !important;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: -0.02em;
+		user-select: none;
+	}
+	#top_header .frame-scrub-sensitivity-button:active{
+		transform: scale(.94);
 	}
 	.pichome-mirror-preview-target{
 		transform: scaleX(-1) !important;
@@ -435,7 +448,8 @@
 							rid:self.imagesData && self.imagesData.rid,
 							path:self.path || (self.imagesData && self.imagesData.dpath),
 							endpoint:MOD_URL+'&op=fileinterface',
-							profile:'mobile-hq'
+							profile:'mobile-hq',
+							pixelsPerFrame:self.FrameScrubPixelsPerFrame
 						});
 					}
 					root.querySelectorAll('iframe').forEach(function(frame){

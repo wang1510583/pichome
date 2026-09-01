@@ -14,7 +14,7 @@
 		'[contenteditable="true"]'
 	].join(',');
 	var MOVE_THRESHOLD = 6;
-	var PIXELS_PER_FRAME = 7;
+	var DEFAULT_PIXELS_PER_FRAME = 7;
 	var MAX_SEGMENTS = 3;
 	var MAX_ACTIVE_REQUESTS = 2;
 
@@ -23,10 +23,15 @@
 		return isFinite(number) ? number : fallback;
 	}
 
-	function frameDeltaForDistance(distance) {
+	function normalisePixelsPerFrame(value) {
+		return parseInt(value, 10) === 3 ? 3 : DEFAULT_PIXELS_PER_FRAME;
+	}
+
+	function frameDeltaForDistance(distance, pixelsPerFrame) {
+		var step = normalisePixelsPerFrame(pixelsPerFrame);
 		return distance < 0
-			? Math.ceil(distance / PIXELS_PER_FRAME)
-			: Math.floor(distance / PIXELS_PER_FRAME);
+			? Math.ceil(distance / step)
+			: Math.floor(distance / step);
 	}
 
 	function frameDuration(fps) {
@@ -73,7 +78,8 @@
 			rid: options.rid === undefined || options.rid === null ? '' : String(options.rid),
 			path: options.path === undefined || options.path === null ? '' : String(options.path),
 			endpoint: options.endpoint ? String(options.endpoint) : 'index.php?mod=details&op=fileinterface',
-			profile: options.profile ? String(options.profile) : 'mobile-hq'
+			profile: options.profile ? String(options.profile) : 'mobile-hq',
+			pixelsPerFrame: normalisePixelsPerFrame(options.pixelsPerFrame)
 		};
 	}
 
@@ -629,6 +635,8 @@
 		var signature = descriptor.rid + '|' + descriptor.path + '|' + descriptor.endpoint + '|' + descriptor.profile;
 		var previous = video.__pichomeDesktopFrameScrub;
 		if (previous && previous.signature === signature && previous.root === root && !previous.destroyed) {
+			previous.pixelsPerFrame = descriptor.pixelsPerFrame;
+			previous.descriptor.pixelsPerFrame = descriptor.pixelsPerFrame;
 			return previous;
 		}
 		if (previous && previous.destroy) previous.destroy();
@@ -647,6 +655,7 @@
 			root: root,
 			document: doc,
 			window: win,
+			pixelsPerFrame: descriptor.pixelsPerFrame,
 			destroyed: false,
 			gesture: null,
 			commit: null,
@@ -695,16 +704,17 @@
 			var distanceX = event.clientX - gesture.startX;
 			var distanceY = event.clientY - gesture.startY;
 			if (!gesture.active) {
-				if (Math.abs(distanceY) >= MOVE_THRESHOLD && Math.abs(distanceY) > Math.abs(distanceX)) {
+				var moveThreshold = Math.min(MOVE_THRESHOLD, state.pixelsPerFrame);
+				if (Math.abs(distanceY) >= moveThreshold && Math.abs(distanceY) > Math.abs(distanceX)) {
 					finishGesture(state, null);
 					return;
 				}
-				if (Math.abs(distanceX) < MOVE_THRESHOLD || Math.abs(distanceX) < Math.abs(distanceY) * 1.05) return;
+				if (Math.abs(distanceX) < moveThreshold || Math.abs(distanceX) < Math.abs(distanceY) * 1.05) return;
 				activateGesture(state, gesture, event);
 			}
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			var desiredDelta = frameDeltaForDistance(distanceX);
+			var desiredDelta = frameDeltaForDistance(distanceX, state.pixelsPerFrame);
 			if (desiredDelta === gesture.desiredDelta) return;
 			gesture.desiredDelta = desiredDelta;
 			scheduleGesturePump(state);
@@ -838,6 +848,7 @@
 		installVideo: installVideo,
 		__test: {
 			frameDeltaForDistance: frameDeltaForDistance,
+			normalisePixelsPerFrame: normalisePixelsPerFrame,
 			frameDuration: frameDuration,
 			commitSeekTime: commitSeekTime,
 			presentedFrameMatches: presentedFrameMatches

@@ -32,5 +32,7 @@ $lang = array (
     'video_cover_extract_failed'=>'Unable to extract the current video frame.',
     'video_cover_save_failed'=>'Unable to save the cover image.',
     'video_cover_set_failed'=>'Failed to set the cover image.',
-    'video_cover_set_success'=>'The current video frame is now the cover image.'
+    'video_cover_set_success'=>'The current video frame is now the cover image.',
+    'frame_scrub_sensitivity'=>'Frame scrubbing sensitivity',
+    'frame_scrub_switch'=>'Click to switch'
 );

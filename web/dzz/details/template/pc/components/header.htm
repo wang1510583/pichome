@@ -100,6 +100,19 @@
 				</el-tooltip>
 				<!--{/if}-->
 				<el-tooltip
+					v-if="FrameScrubSensitivityVisible()"
+					effect="dark"
+					:content="'{lang frame_scrub_sensitivity}：'+FrameScrubPixelsPerFrame+'px · {lang frame_scrub_switch}'"
+					placement="bottom">
+					<div
+						class="right-block frame-scrub-sensitivity-button"
+						role="button"
+						:aria-label="'{lang frame_scrub_sensitivity} '+FrameScrubPixelsPerFrame+'px'"
+						@click.stop="ToggleFrameScrubSensitivity">
+						<span>{{FrameScrubPixelsPerFrame}}px</span>
+					</div>
+				</el-tooltip>
+				<el-tooltip
 					v-if="MediaMirrorPreviewVisible()"
 					effect="dark"
 					:content="MediaMirrorPreview?'{lang cancel_mirror_preview}':'{lang mirror_preview}'"
@@ -177,10 +190,25 @@
 	var headerMixin = {
 		data(){
 			return {
-				headerScales:[5,10,25,50,100,125,150,200,300,400,800]
+				headerScales:[5,10,25,50,100,125,150,200,300,400,800],
+				FrameScrubPixelsPerFrame:(function(){
+					try{return localStorage.getItem('pichomeDesktopFrameScrubPixels') == '3' ? 3 : 7;}catch(error){return 7;}
+				})()
 			}
 		},
 		methods:{
+			FrameScrubSensitivityVisible(){
+				const data = this.imagesData || {};
+				return !this.HtmlLoading && !!data.rid && (data.type == 'video' || data.opentype == 'video');
+			},
+			ToggleFrameScrubSensitivity(){
+				if(!this.FrameScrubSensitivityVisible()) return false;
+				this.FrameScrubPixelsPerFrame = this.FrameScrubPixelsPerFrame == 3 ? 7 : 3;
+				try{localStorage.setItem('pichomeDesktopFrameScrubPixels',String(this.FrameScrubPixelsPerFrame));}catch(error){}
+				const self = this;
+				this.$nextTick(function(){self.FramePreviewInstallKeyboard();});
+				return true;
+			},
 			MediaMirrorPreviewVisible(){
 				const data = this.imagesData || {};
 				if(this.HtmlLoading || !data.rid) return false;
