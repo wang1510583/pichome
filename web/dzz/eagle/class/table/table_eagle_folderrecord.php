@@ -19,6 +19,207 @@ class table_eagle_folderrecord extends dzz_table
         parent::__construct();
     }
 
+    /**
+     * Ensure that a Pichome folder in a local Eagle library has a matching
+     * Eagle folder node and mapping record. This is used by web-created
+     * folders, which otherwise only exist in the Pichome database and are
+     * removed again by the next Eagle index refresh.
+     */
+    public function ensure_folder_mapping($appid, $fid, $appdata = array())
+    {
+        $seen = array();
+        return $this->ensure_folder_mapping_internal($appid, $fid, $appdata, $seen);
+    }
+
+    private function ensure_folder_mapping_internal($appid, $fid, $appdata, &$seen)
+    {
+        $appid = trim(strval($appid));
+        $fid = trim(strval($fid));
+        if ($appid === '' || $fid === '') {
+            return array('error' => 'Eagle 文件夹参数无效');
+        }
+        if (isset($seen[$fid])) {
+            return array('error' => '检测到循环的分类层级，无法创建 Eagle 文件夹');
+        }
+        if (count($seen) >= 100) {
+            return array('error' => '分类层级过深，无法创建 Eagle 文件夹');
+        }
+        $seen[$fid] = true;
+
+        $folder = DB::fetch_first(
+            'select fid,fname,pfid,`level` from %t where fid=%s and appid=%s',
+            array('pichome_folder', $fid, $appid)
+        );
+        if (!$folder) {
+            unset($seen[$fid]);
+            return array('error' => '当前分类不存在');
+        }
+
+        if (!$appdata || empty($appdata['appid'])) {
+            $appdata = C::t('pichome_vapp')->fetch($appid);
+        }
+        if (!$appdata || intval($appdata['type']) !== 0) {
+            unset($seen[$fid]);
+            return array('error' => '当前素材库不是 Eagle 素材库');
+        }
+
+        $parentEfid = '';
+        if (!empty($folder['pfid'])) {
+            $parent = $this->ensure_folder_mapping_internal($appid, $folder['pfid'], $appdata, $seen);
+            if (!empty($parent['error'])) {
+                unset($seen[$fid]);
+                return $parent;
+            }
+            $parentEfid = $parent['efid'];
+        }
+
+        $library = realpath($appdata['path']);
+        if (!$library || !is_dir($library) || !is_writable($library)) {
+            unset($seen[$fid]);
+            return array('error' => 'Eagle 素材库目录不可写');
+        }
+        $metadatafile = $library . DIRECTORY_SEPARATOR . 'metadata.json';
+        if (!is_file($metadatafile) || !is_readable($metadatafile) || !is_writable($metadatafile)) {
+            unset($seen[$fid]);
+            return array('error' => 'Eagle metadata.json 不可读写');
+        }
+
+        $lockfile = $metadatafile . '.lock';
+        $lock = @fopen($lockfile, 'c+');
+        if ($lock) @chmod($lockfile, 0664);
+        if (!$lock || !flock($lock, LOCK_EX)) {
+            if ($lock) fclose($lock);
+            unset($seen[$fid]);
+            return array('error' => '无法锁定 Eagle 文件夹信息');
+        }
+
+        $insertedMappingId = 0;
+        $result = array();
+        try {
+            clearstatcache(true, $metadatafile);
+            $raw = @file_get_contents($metadatafile);
+            $metadata = ($raw !== false) ? json_decode($raw, true) : null;
+            if (!is_array($metadata) || !isset($metadata['folders']) || !is_array($metadata['folders'])) {
+                throw new Exception('Eagle metadata.json 格式错误');
+            }
+
+            // Re-query while holding the file lock so concurrent uploads to
+            // the same new folder cannot create duplicate Eagle folders.
+            $mapping = DB::fetch_first(
+                'select id,efid from %t where fid=%s and appid=%s order by id asc',
+                array($this->_table, $fid, $appid)
+            );
+            $efid = $mapping ? trim(strval($mapping['efid'])) : '';
+            $nodeExists = $efid !== '' && $this->eagle_folder_exists($metadata['folders'], $efid);
+
+            if (!$nodeExists) {
+                if ($parentEfid !== '' && !$this->eagle_folder_exists($metadata['folders'], $parentEfid)) {
+                    throw new Exception('对应的 Eagle 上级文件夹不存在');
+                }
+                if ($efid === '') {
+                    $efid = $this->create_eagle_folder_id($metadata['folders'], $appid);
+                    if ($efid === '') throw new Exception('无法生成 Eagle 文件夹 ID');
+                    $insertedMappingId = intval(parent::insert(array(
+                        'appid' => $appid,
+                        'efid' => $efid,
+                        'fid' => $fid
+                    ), true));
+                    if (!$insertedMappingId) throw new Exception('无法保存 Eagle 文件夹映射');
+                }
+
+                $nowms = (int) round(microtime(true) * 1000);
+                $node = array(
+                    'id' => $efid,
+                    'name' => strval($folder['fname']),
+                    'description' => '',
+                    'children' => array(),
+                    'modificationTime' => $nowms,
+                    'tags' => array(),
+                    'password' => '',
+                    'passwordTips' => ''
+                );
+                if (!$this->append_eagle_folder($metadata['folders'], $parentEfid, $node)) {
+                    throw new Exception('无法写入对应的 Eagle 文件夹');
+                }
+                $metadata['modificationTime'] = $nowms;
+                $encoded = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if ($encoded === false) throw new Exception('无法编码 Eagle 文件夹信息');
+
+                $tmpfile = $metadatafile . '.tmp.' . getmypid() . '.' . random(6);
+                if (@file_put_contents($tmpfile, $encoded, LOCK_EX) === false) {
+                    @unlink($tmpfile);
+                    throw new Exception('无法写入 Eagle 文件夹信息');
+                }
+                @chmod($tmpfile, 0664);
+                if (!@rename($tmpfile, $metadatafile)) {
+                    @unlink($tmpfile);
+                    throw new Exception('无法更新 Eagle 文件夹信息');
+                }
+                @chmod($metadatafile, 0664);
+            }
+
+            $result = array(
+                'fid' => $fid,
+                'level' => intval($folder['level']),
+                'efid' => $efid
+            );
+        } catch (Exception $e) {
+            if ($insertedMappingId) parent::delete($insertedMappingId);
+            $result = array('error' => $e->getMessage());
+        }
+
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        unset($seen[$fid]);
+        return $result;
+    }
+
+    private function eagle_folder_exists($folders, $efid)
+    {
+        foreach ((array)$folders as $folder) {
+            if (isset($folder['id']) && strval($folder['id']) === strval($efid)) return true;
+            if (!empty($folder['children']) && is_array($folder['children']) &&
+                $this->eagle_folder_exists($folder['children'], $efid)) return true;
+        }
+        return false;
+    }
+
+    private function append_eagle_folder(&$folders, $parentEfid, $node)
+    {
+        if ($parentEfid === '') {
+            $folders[] = $node;
+            return true;
+        }
+        foreach ($folders as &$folder) {
+            if (isset($folder['id']) && strval($folder['id']) === strval($parentEfid)) {
+                if (!isset($folder['children']) || !is_array($folder['children'])) $folder['children'] = array();
+                $folder['children'][] = $node;
+                unset($folder);
+                return true;
+            }
+            if (!empty($folder['children']) && is_array($folder['children']) &&
+                $this->append_eagle_folder($folder['children'], $parentEfid, $node)) {
+                unset($folder);
+                return true;
+            }
+        }
+        unset($folder);
+        return false;
+    }
+
+    private function create_eagle_folder_id($folders, $appid)
+    {
+        $alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        for ($attempt = 0; $attempt < 100; $attempt++) {
+            $efid = '';
+            for ($i = 0; $i < 13; $i++) $efid .= $alphabet[random_int(0, 35)];
+            if ($this->eagle_folder_exists($folders, $efid)) continue;
+            if (DB::result_first('select id from %t where efid=%s and appid=%s', array($this->_table, $efid, $appid))) continue;
+            return $efid;
+        }
+        return '';
+    }
+
     public function createfidby_efidappid($efid, $appid)
     {
 
@@ -201,4 +402,3 @@ class table_eagle_folderrecord extends dzz_table
     }
 
 }
-

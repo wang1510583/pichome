@@ -166,7 +166,11 @@ class io_dzz extends io_api
                 array('pichome_folder', 'eagle_folderrecord', $pfid, $appdata['appid'])
             );
             if (!$folderdata || !$folderdata['efid']) {
-                return array('error' => '当前分类没有对应的 Eagle 文件夹，上传已取消');
+                $folderdata = C::t('#eagle#eagle_folderrecord')->ensure_folder_mapping($appdata['appid'], $pfid, $appdata);
+                if (!$folderdata || !empty($folderdata['error']) || empty($folderdata['efid'])) {
+                    $message = !empty($folderdata['error']) ? $folderdata['error'] : '无法创建对应的 Eagle 文件夹';
+                    return array('error' => $message);
+                }
             }
         }
 

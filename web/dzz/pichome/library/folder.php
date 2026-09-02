@@ -14,6 +14,19 @@ if($operation == 'deletefolder'){//删除目录
     $pfid = isset($_GET['pfid']) ? trim($_GET['pfid']):'';
     $foldername = getstr($_GET['foldername']);
     $return = C::t('pichome_folder')->create_folder_by_appid($appid,$foldername,$pfid);
+    if (!empty($return['error'])) {
+        exit(json_encode(array('success'=>false,'msg'=>$return['error'])));
+    }
+    $appdata = C::t('pichome_vapp')->fetch($appid);
+    if ($appdata && intval($appdata['type']) === 0 && !empty($return['fid'])) {
+        $mapping = C::t('#eagle#eagle_folderrecord')->ensure_folder_mapping($appid, $return['fid'], $appdata);
+        if (!empty($mapping['error'])) {
+            // The folder is still empty and was created by this request, so
+            // roll it back instead of leaving another unusable DB-only node.
+            C::t('pichome_folder')->delete_by_fids($return['fid']);
+            exit(json_encode(array('success'=>false,'msg'=>$mapping['error'])));
+        }
+    }
     Hook::listen('lang_parse',$return,['getFolderLangKey']);
     exit(json_encode(['success'=>true,'data'=>$return]));
 }elseif($operation == 'setfoldercover'){//设置文件夹封面
