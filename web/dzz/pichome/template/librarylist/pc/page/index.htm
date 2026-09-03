@@ -860,6 +860,7 @@
 			});
 			// ==== 素材卡片拖拽：站内移动分类 / Chrome 拖出下载 ====
 			const PICHOME_DRAG_MIME = 'text/pichome-rids';
+			const PICHOME_DOWNLOAD_DRAG_MIME = 'application/x-pichome-download+json';
 			let pichomeDragCard = null;
 			let pichomeExpandTimer = null;
 			function pichomeGetDragRids(ev){
@@ -934,6 +935,13 @@
 				const downloadUrl = pichomeDragDownloadUrl(item);
 				if(!downloadUrl) return false;
 				// Chromium's DownloadURL payload is: MIME type : filename : URL.
+				try{
+					ev.dataTransfer.setData(PICHOME_DOWNLOAD_DRAG_MIME, JSON.stringify({
+						url:downloadUrl,
+						name:filename,
+						type:pichomeDragMimeType(ext)
+					}));
+				}catch(err){}
 				ev.dataTransfer.setData('text/uri-list', downloadUrl);
 				ev.dataTransfer.setData('text/plain', downloadUrl);
 				ev.dataTransfer.setData('text/html', '<a href="' + downloadUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '" download="' + filename.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">' + filename.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>');

@@ -3,6 +3,28 @@ if (!defined('IN_OAOOA')) {//所有的php文件必须加上此句，防止被外
     exit('Access Denied');
 }
 
+// Allow the Codex Remote page on this same Tailscale host (default HTTPS
+// origin) to turn a Pichome drag URL into a real uploaded File.  Chrome does
+// not expose DownloadURL promised files to another web page, so that page has
+// to fetch the signed download URL instead.  Keep the CORS grant deliberately
+// narrow: same HTTPS hostname and the default HTTPS port only.
+$dragOrigin = isset($_SERVER['HTTP_ORIGIN']) ? trim($_SERVER['HTTP_ORIGIN']) : '';
+if ($dragOrigin !== '') {
+    $originParts = @parse_url($dragOrigin);
+    $requestHost = @parse_url('http://' . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : ''), PHP_URL_HOST);
+    $originPort = isset($originParts['port']) ? intval($originParts['port']) : 443;
+    if (is_array($originParts)
+        && isset($originParts['scheme'], $originParts['host'])
+        && strtolower($originParts['scheme']) === 'https'
+        && strtolower($originParts['host']) === strtolower((string)$requestHost)
+        && $originPort === 443) {
+        @header('Access-Control-Allow-Origin: ' . $dragOrigin);
+        @header('Access-Control-Allow-Credentials: true');
+        @header('Access-Control-Expose-Headers: Content-Disposition, Content-Length, Content-Type');
+        @header('Vary: Origin', false);
+    }
+}
+
 $patharr = Pdecode($_GET['dpath']);
 $rid = $patharr['path'];
 
@@ -65,4 +87,3 @@ $vappdata = DB::fetch_first("select v.* from %t r left join %t v on r.appid = v.
     $d->download($attachurl, $resourcesdata['name'], $fileSize, 0, true);
     exit();
 //}
-
