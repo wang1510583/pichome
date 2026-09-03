@@ -875,6 +875,8 @@
 				return (window.__pichomeDragRids && window.__pichomeDragRids.length) ? window.__pichomeDragRids.slice() : [];
 			}
 			function pichomeGetDragResource(rid){
+				const mapped = window.__pichomeDragResources && window.__pichomeDragResources[String(rid)];
+				if(mapped) return mapped;
 				const lists = [];
 				if(self.ImageDataParam && Array.isArray(self.ImageDataParam.data)) lists.push(self.ImageDataParam.data);
 				if(self.$refs.RefImageLayout && Array.isArray(self.$refs.RefImageLayout.NewImageData)) lists.push(self.$refs.RefImageLayout.NewImageData);
@@ -914,18 +916,30 @@
 				}
 				return filename;
 			}
+			function pichomeDragDownloadUrl(item){
+				if(!item || !item.dpath) return '';
+				const modurl = (typeof MOD_URL === 'string' && MOD_URL) ? MOD_URL : 'index.php?mod=pichome';
+				// Use the origin that is already authenticated in this Chrome tab.
+				// SITEURL may point at another configured domain/port.
+				const url = new URL(modurl, window.location.href);
+				url.searchParams.set('op', 'download');
+				url.searchParams.delete('do');
+				url.searchParams.set('dpath', String(item.dpath));
+				return url.href;
+			}
 			function pichomeSetChromeDownloadDrag(ev, item){
 				if(!ev || !ev.dataTransfer || !pichomeCanDragDownload(item)) return false;
 				const ext = String(item.ext || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
 				const filename = pichomeDragFilename(item);
-				const siteurl = (typeof SITEURL === 'string') ? SITEURL : window.location.origin + '/';
-				const modurl = (typeof MOD_URL === 'string') ? MOD_URL : 'index.php?mod=pichome';
-				const separator = modurl.indexOf('?') > -1 ? '&' : '?';
-				const downloadUrl = new URL(siteurl + modurl + separator + 'op=download&dpath=' + encodeURIComponent(String(item.dpath)), window.location.href).href;
+				const downloadUrl = pichomeDragDownloadUrl(item);
+				if(!downloadUrl) return false;
 				// Chromium's DownloadURL payload is: MIME type : filename : URL.
-				ev.dataTransfer.setData('DownloadURL', pichomeDragMimeType(ext) + ':' + filename + ':' + downloadUrl);
 				ev.dataTransfer.setData('text/uri-list', downloadUrl);
 				ev.dataTransfer.setData('text/plain', downloadUrl);
+				ev.dataTransfer.setData('text/html', '<a href="' + downloadUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '" download="' + filename.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">' + filename.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>');
+				// Set this last so another textual flavour cannot become Chrome's
+				// promised-file fallback.
+				ev.dataTransfer.setData('DownloadURL', pichomeDragMimeType(ext) + ':' + filename + ':' + downloadUrl);
 				return true;
 			}
 			function pichomeClearDropUI(){
@@ -968,19 +982,29 @@
 				const checked = (self.ImageParam && self.ImageParam.checkedKdys) || [];
 				if(checked.length > 1 && checked.indexOf(rid) > -1) rids = checked.slice();
 				try{ ev.dataTransfer.setData(PICHOME_DRAG_MIME, JSON.stringify(rids)); }catch(err){}
+				const dragItem = pichomeGetDragResource(rid);
 				let hasDownload = false;
 				if(rids.length === 1){
-					try{ hasDownload = pichomeSetChromeDownloadDrag(ev, pichomeGetDragResource(rid)); }catch(err){}
+					try{ hasDownload = pichomeSetChromeDownloadDrag(ev, dragItem); }catch(err){}
 				}
 				if(!hasDownload){
-					try{ ev.dataTransfer.setData('text/plain', rids.join(',')); }catch(err){}
+					// Never expose the internal RID to external drop targets.  The custom
+					// MIME type and in-page state above still drive category moves.
+					try{ ev.dataTransfer.setData('text/plain', dragItem ? pichomeDragFilename(dragItem) : 'Pichome 素材'); }catch(err){}
 				}
 				ev.dataTransfer.effectAllowed = hasDownload ? 'copyMove' : 'move';
+				window.__pichomeLastDragDebug = {
+					rid:rid,
+					resourceFound:!!dragItem,
+					downloadAllowed:pichomeCanDragDownload(dragItem),
+					downloadPayload:hasDownload,
+					at:Date.now()
+				};
 				window.__pichomeDragRids = rids;
 				const dw = document.querySelector('#pichome-left-sidebar');
 				if(dw) dw.classList.add('pichome-dragging-asset');
 				pichomeClearDropUI();
-			}, true);
+			}, false);
 			document.addEventListener('dragend', function(){
 				const dw2 = document.querySelector('#pichome-left-sidebar');
 				if(dw2) dw2.classList.remove('pichome-dragging-asset');

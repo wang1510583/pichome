@@ -458,6 +458,14 @@
 			Imagereturnparam(data){//列表加载完成返回得参数
 				let self = this;
 				this.ImageDataParam = data;
+				// Keep a plain lookup table for native dragstart.  Depending on the
+				// ImageLayout render cycle, reading the component ref during a drag can
+				// race with its virtual-list refresh and return no resource.
+				const dragResources = Object.create(null);
+				for(const dragItem of (this.ImageDataParam.data || [])){
+					if(dragItem && dragItem.rid) dragResources[String(dragItem.rid)] = dragItem;
+				}
+				window.__pichomeDragResources = dragResources;
 				var arr = [];
 				for(var i in this.ImageDataParam.data){
 					let index = self.ImageIcon.data.findIndex(function(current){
