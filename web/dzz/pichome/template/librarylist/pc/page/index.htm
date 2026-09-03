@@ -892,7 +892,7 @@
 			function pichomeCanDragDownload(item){
 				if(!item || !item.dpath) return false;
 				const permission = (typeof item.download !== 'undefined') ? item.download : item.down;
-				return permission === true || parseInt(permission, 10) === 1 || String(permission).toLowerCase() === 'true';
+				return permission === true || parseInt(permission, 10) > 0 || String(permission).toLowerCase() === 'true';
 			}
 			function pichomeDragMimeType(ext){
 				const types = {

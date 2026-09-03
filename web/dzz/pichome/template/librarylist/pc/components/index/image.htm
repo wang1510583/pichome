@@ -42,6 +42,12 @@
 									<el-icon><Download /></el-icon>
 									{lang download}
 								</el-dropdown-item>
+								<el-dropdown-item
+									v-if="ImageCanCopyToClipboard(data)"
+									:command="ImageOperationVal('copyImage',data)">
+									<el-icon><Copy-Document /></el-icon>
+									复制图片
+								</el-dropdown-item>
 								<el-dropdown-item 
 									v-if="parseInt(data.collection)" 
 									:command="ImageOperationVal('collect',data)">
@@ -91,6 +97,12 @@
 								class="circulars">
 								<el-icon><Download /></el-icon>
 								{lang download}
+							</el-dropdown-item>
+							<el-dropdown-item
+								v-if="ImageCanCopyToClipboard(data)"
+								:command="ImageOperationVal('copyImage',data)">
+								<el-icon><Copy-Document /></el-icon>
+								复制图片
 							</el-dropdown-item>
 							<el-dropdown-item 
 								v-if="parseInt(data.collection)" 
@@ -299,7 +311,9 @@
 		methods:{
 			async ImageOperationf(data){
 				let self = this;
-				if(data.type == 'delete'){
+				if(data.type == 'copyImage'){
+					await self.ImageCopyWithFeedback(data.resourcedata);
+				}else if(data.type == 'delete'){
 					self.ImageMenu.data = data.resourcedata;
 					self.RightActiveRid = [data.resourcedata.rid];
 					self.ImageOperation('delete');
@@ -604,7 +618,8 @@
 			ImageCanCopyToClipboard(item){
 				if(!item || !item.dpath) return false;
 				const permission = (typeof item.download !== 'undefined') ? item.download : item.down;
-				const allowed = permission === true || parseInt(permission, 10) === 1 || String(permission).toLowerCase() === 'true';
+				// Pichome 首项可能返回 true，后续项则可能返回权限位掩码（例如 256）。
+				const allowed = permission === true || parseInt(permission, 10) > 0 || String(permission).toLowerCase() === 'true';
 				if(!allowed) return false;
 				const ext = String(item.ext || '').toLowerCase();
 				return ['jpg','jpeg','png','gif','webp','bmp','svg','avif','ico'].indexOf(ext) > -1;
@@ -700,6 +715,24 @@
 				}
 				await navigator.clipboard.write([clipboardItem]);
 			},
+			async ImageCopyWithFeedback(item){
+				try{
+					await this.ImageCopyToClipboard(item);
+					this.$message({
+						message:'图片已复制，可直接粘贴到微信',
+						type:'success'
+					});
+					return true;
+				}catch(e){
+					const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+					this.$message({
+						message:denied ? '复制失败，请允许此网站使用剪贴板后重试' : '复制图片失败：' + ((e && e.message) || '未知错误'),
+						type:'error',
+						duration:5000
+					});
+					return false;
+				}
+			},
 			async ImageOperation(type){
 				if(!this.ImageMenu.data){
 					return false;
@@ -708,20 +741,7 @@
 				let self = this;
 				switch(type){
 					case 'copyImage':
-						try{
-							await this.ImageCopyToClipboard(this.ImageMenu.data);
-							self.$message({
-								message:'图片已复制，可直接粘贴到微信',
-								type:'success'
-							});
-						}catch(e){
-							const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
-							self.$message({
-								message:denied ? '复制失败，请允许此网站使用剪贴板后重试' : '复制图片失败：' + ((e && e.message) || '未知错误'),
-								type:'error',
-								duration:5000
-							});
-						}
+						await this.ImageCopyWithFeedback(this.ImageMenu.data);
 					break;
 					case 'share'://{lang share}
 						

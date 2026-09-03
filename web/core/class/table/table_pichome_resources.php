@@ -693,6 +693,10 @@ class table_pichome_resources extends dzz_table
         //获取所有的缩略图表数据
         $imagedatas = $this->getThumbsByrids($rids);
         foreach ($resourcesdata as $v) {
+			// `$perm` is an optional permission supplied by a shared view.  When it
+			// is absent, calculate a fresh permission for every resource instead of
+			// leaking the first resource's bitmask into the remaining list items.
+			$itemPerm = $perm;
 
             if (($nodel && $v['isdelete'] > 0)  ) continue;
             $levelLimit = $resourcesdata['level'] && getglobal('pichomelevel') < $v['level'];
@@ -700,10 +704,10 @@ class table_pichome_resources extends dzz_table
                 $v['share'] = $v['download'] = $v['collection'] = 0;
             }elseif($levelLimit){
                 $v['share'] = $v['download'] = $v['collection'] = 0;
-            }elseif($perm){
-                $v['share'] =perm::check('share',$perm);
-                $v['download'] = perm::check('download2',$perm);
-                $v['collection'] = perm::check('collect',$perm);;
+            }elseif($itemPerm){
+                $v['share'] =perm::check('share',$itemPerm);
+                $v['download'] = perm::check('download2',$itemPerm);
+                $v['collection'] = perm::check('collect',$itemPerm);;
             }else{
                 $v['share'] = C::t('pichome_vapp')->getpermbypermdata($downshare[$v['appid']]['share'], $v['appid'], 'share');
                 $v['download'] = C::t('pichome_vapp')->getpermbypermdata($downshare[$v['appid']]['download'], $v['appid'], 'download');
@@ -715,7 +719,7 @@ class table_pichome_resources extends dzz_table
             }else{
                 $v['allowImageSearch'] = 1;
             }*/
-            if(!$perm){
+            if(!$itemPerm){
                 //处理dpath;
                 if($levelLimit){
                     $permactions=array('flag');
@@ -732,13 +736,13 @@ class table_pichome_resources extends dzz_table
                 if($v['collection']){
                     $permactions[]='collect';
                 }
-                $perm=\perm::setPerm($permactions);
+                $itemPerm=\perm::setPerm($permactions);
             }
-            $v['perm']=$perm;
+            $v['perm']=$itemPerm;
             if($v['download']){
                 $v['downloadurl'] = IO::getFileUri($v['rid']);
             }
-            $v['dpath'] = Pencode(array('path'=>$v['rid'],'perm'=>$perm,'ishare'=>0,'isadmin'=>1),7200);
+            $v['dpath'] = Pencode(array('path'=>$v['rid'],'perm'=>$itemPerm,'ishare'=>0,'isadmin'=>1),7200);
             $v['opentype'] = getTypeByExt($v['ext']);
             if ($v['opentype'] == 'audio' || $v['opentype'] == 'video') {
                 if(in_array($v['ext'],explode(',',getglobal('config/pichomeplayermediaext')))){
