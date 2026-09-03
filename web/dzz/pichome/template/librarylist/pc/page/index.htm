@@ -858,7 +858,7 @@
 					}, 100);
 				}
 			});
-			// ==== 素材拖拽移动到分类目录 (2026-08-19) ====
+			// ==== 素材卡片拖拽：站内移动分类 / Chrome 拖出下载 ====
 			const PICHOME_DRAG_MIME = 'text/pichome-rids';
 			let pichomeDragCard = null;
 			let pichomeExpandTimer = null;
@@ -873,6 +873,60 @@
 					}catch(err){}
 				}
 				return (window.__pichomeDragRids && window.__pichomeDragRids.length) ? window.__pichomeDragRids.slice() : [];
+			}
+			function pichomeGetDragResource(rid){
+				const lists = [];
+				if(self.ImageDataParam && Array.isArray(self.ImageDataParam.data)) lists.push(self.ImageDataParam.data);
+				if(self.$refs.RefImageLayout && Array.isArray(self.$refs.RefImageLayout.NewImageData)) lists.push(self.$refs.RefImageLayout.NewImageData);
+				for(let i = 0; i < lists.length; i++){
+					const item = lists[i].find(function(current){
+						return current && String(current.rid) === String(rid);
+					});
+					if(item) return item;
+				}
+				return null;
+			}
+			function pichomeCanDragDownload(item){
+				if(!item || !item.dpath) return false;
+				const permission = (typeof item.download !== 'undefined') ? item.download : item.down;
+				return permission === true || parseInt(permission, 10) === 1 || String(permission).toLowerCase() === 'true';
+			}
+			function pichomeDragMimeType(ext){
+				const types = {
+					jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif',
+					webp:'image/webp', bmp:'image/bmp', svg:'image/svg+xml',
+					mp4:'video/mp4', mov:'video/quicktime', mkv:'video/x-matroska',
+					webm:'video/webm', avi:'video/x-msvideo', m4v:'video/x-m4v'
+				};
+				return types[ext] || 'application/octet-stream';
+			}
+			function pichomeDragFilename(item){
+				const ext = String(item.ext || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+				const suffix = ext ? '.' + ext : '';
+				let filename = String(item.name || item.filename || item.rid || 'pichome');
+				if(suffix && filename.toLowerCase().slice(-suffix.length) !== suffix) filename += suffix;
+				filename = filename.replace(/[\x00-\x1f\\\/:*?"<>|]/g, '_').trim();
+				if(!filename) filename = 'pichome' + suffix;
+				if(filename.length > 180){
+					let basename = filename;
+					if(suffix && filename.toLowerCase().slice(-suffix.length) === suffix) basename = filename.slice(0, -suffix.length);
+					filename = basename.slice(0, Math.max(1, 180 - suffix.length)).replace(/[. ]+$/g, '') + suffix;
+				}
+				return filename;
+			}
+			function pichomeSetChromeDownloadDrag(ev, item){
+				if(!ev || !ev.dataTransfer || !pichomeCanDragDownload(item)) return false;
+				const ext = String(item.ext || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+				const filename = pichomeDragFilename(item);
+				const siteurl = (typeof SITEURL === 'string') ? SITEURL : window.location.origin + '/';
+				const modurl = (typeof MOD_URL === 'string') ? MOD_URL : 'index.php?mod=pichome';
+				const separator = modurl.indexOf('?') > -1 ? '&' : '?';
+				const downloadUrl = new URL(siteurl + modurl + separator + 'op=download&dpath=' + encodeURIComponent(String(item.dpath)), window.location.href).href;
+				// Chromium's DownloadURL payload is: MIME type : filename : URL.
+				ev.dataTransfer.setData('DownloadURL', pichomeDragMimeType(ext) + ':' + filename + ':' + downloadUrl);
+				ev.dataTransfer.setData('text/uri-list', downloadUrl);
+				ev.dataTransfer.setData('text/plain', downloadUrl);
+				return true;
 			}
 			function pichomeClearDropUI(){
 				const treeWrap = document.querySelector('#pichome-left-sidebar');
@@ -904,20 +958,24 @@
 					pichomeDragCard = null;
 				}
 			}, true);
-			// dragstart: 记录被拖 rid 列表(单张或当前多选集合)
+			// dragstart: 站内保留 rid 移动；Chrome 单素材拖到站外时下载原文件。
 			document.addEventListener('dragstart', function(ev){
 				const card = ev.target && ev.target.closest ? ev.target.closest('[data-rid]') : null;
-				if(!card) return;
+				if(!card || !ev.dataTransfer) return;
 				const rid = card.getAttribute('data-rid');
 				if(!rid) return;
 				let rids = [rid];
 				const checked = (self.ImageParam && self.ImageParam.checkedKdys) || [];
 				if(checked.length > 1 && checked.indexOf(rid) > -1) rids = checked.slice();
-				try{
-					ev.dataTransfer.setData(PICHOME_DRAG_MIME, JSON.stringify(rids));
-					ev.dataTransfer.setData('text/plain', rids.join(','));
-				}catch(err){}
-				ev.dataTransfer.effectAllowed = 'move';
+				try{ ev.dataTransfer.setData(PICHOME_DRAG_MIME, JSON.stringify(rids)); }catch(err){}
+				let hasDownload = false;
+				if(rids.length === 1){
+					try{ hasDownload = pichomeSetChromeDownloadDrag(ev, pichomeGetDragResource(rid)); }catch(err){}
+				}
+				if(!hasDownload){
+					try{ ev.dataTransfer.setData('text/plain', rids.join(',')); }catch(err){}
+				}
+				ev.dataTransfer.effectAllowed = hasDownload ? 'copyMove' : 'move';
 				window.__pichomeDragRids = rids;
 				const dw = document.querySelector('#pichome-left-sidebar');
 				if(dw) dw.classList.add('pichome-dragging-asset');
@@ -1002,7 +1060,7 @@
 					}
 				}, true);
 			}
-			// ==== 素材拖拽移动到分类目录 END ====
+			// ==== 素材卡片拖拽 END ====
 
 			dzzoffice.WindowThis = this;
 		}
