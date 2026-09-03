@@ -172,6 +172,13 @@
 				{lang download}
 			</template>
 		</li>
+		<li
+			class="el-dropdown-menu__item"
+			v-if="ImageMenu.operation.copyImage"
+			@click.stop="ImageOperation('copyImage')">
+			<el-icon><Copy-Document /></el-icon>
+			复制图片
+		</li>
 		<li 
 			class="el-dropdown-menu__item" 
 			v-if="ImageMenu.operation.link"
@@ -274,6 +281,7 @@
 						cove:false,
 						link:false,
 						down:false,
+						copyImage:false,
 						location:false,
 						delfolder:false,
 						delete:false,
@@ -349,6 +357,7 @@
 					cove:false,
 					link:false,
 					down:false,
+					copyImage:false,
 					location:false,
 					delfolder:false,
 					delete:false,
@@ -371,6 +380,9 @@
 				}
 				if(item && parseFloat(item.allowImageSearch)){
 					arr.push('allowImageSearch');
+				}
+				if(this.ImageCanCopyToClipboard(item)){
+					arr.push('copyImage');
 				}
 				if(item && !item.download){
 					let findex = arr.findIndex(function(current){
@@ -589,6 +601,105 @@
 				}
 				
 			},
+			ImageCanCopyToClipboard(item){
+				if(!item || !item.dpath) return false;
+				const permission = (typeof item.download !== 'undefined') ? item.download : item.down;
+				const allowed = permission === true || parseInt(permission, 10) === 1 || String(permission).toLowerCase() === 'true';
+				if(!allowed) return false;
+				const ext = String(item.ext || '').toLowerCase();
+				return ['jpg','jpeg','png','gif','webp','bmp','svg','avif','ico'].indexOf(ext) > -1;
+			},
+			ImageClipboardDownloadUrl(item){
+				if(!item || !item.dpath) return '';
+				const modurl = (typeof MOD_URL === 'string' && MOD_URL) ? MOD_URL : 'index.php?mod=pichome';
+				const url = new URL(modurl, window.location.href);
+				url.searchParams.set('op', 'download');
+				url.searchParams.delete('do');
+				url.searchParams.set('dpath', String(item.dpath));
+				return url.href;
+			},
+			async ImageClipboardDecodeBlob(blob){
+				if(typeof window.createImageBitmap === 'function'){
+					try{
+						return await window.createImageBitmap(blob, {imageOrientation:'from-image'});
+					}catch(e){}
+				}
+				return await new Promise(function(resolve, reject){
+					const objectUrl = URL.createObjectURL(blob);
+					const image = new Image();
+					image.onload = function(){
+						URL.revokeObjectURL(objectUrl);
+						resolve(image);
+					};
+					image.onerror = function(){
+						URL.revokeObjectURL(objectUrl);
+						reject(new Error('浏览器无法解码这张图片'));
+					};
+					image.src = objectUrl;
+				});
+			},
+			async ImageClipboardPng(item){
+				const downloadUrl = this.ImageClipboardDownloadUrl(item);
+				if(!downloadUrl) throw new Error('图片下载地址无效');
+				const response = await fetch(downloadUrl, {
+					method:'GET',
+					credentials:'same-origin'
+				});
+				if(!response.ok) throw new Error('下载原图失败（HTTP ' + response.status + '）');
+				const sourceBlob = await response.blob();
+				if(!sourceBlob || !sourceBlob.size) throw new Error('原图内容为空');
+				const ext = String(item.ext || '').toLowerCase();
+				if(ext === 'png'){
+					return new Blob([sourceBlob], {type:'image/png'});
+				}
+
+				const mimeTypes = {
+					jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp',
+					bmp:'image/bmp', svg:'image/svg+xml', avif:'image/avif', ico:'image/x-icon'
+				};
+				const decodeBlob = sourceBlob.type && sourceBlob.type.indexOf('image/') === 0
+					? sourceBlob
+					: new Blob([sourceBlob], {type:mimeTypes[ext] || 'application/octet-stream'});
+				const decoded = await this.ImageClipboardDecodeBlob(decodeBlob);
+				try{
+					const sourceWidth = Number(decoded.width || decoded.naturalWidth || 0);
+					const sourceHeight = Number(decoded.height || decoded.naturalHeight || 0);
+					if(!sourceWidth || !sourceHeight) throw new Error('无法读取图片尺寸');
+					const maxEdge = 8192;
+					const maxPixels = 40000000;
+					const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight), Math.sqrt(maxPixels / (sourceWidth * sourceHeight)));
+					const width = Math.max(1, Math.round(sourceWidth * scale));
+					const height = Math.max(1, Math.round(sourceHeight * scale));
+					const canvas = document.createElement('canvas');
+					canvas.width = width;
+					canvas.height = height;
+					const context = canvas.getContext('2d', {alpha:true});
+					if(!context) throw new Error('浏览器无法创建图片画布');
+					context.drawImage(decoded, 0, 0, width, height);
+					return await new Promise(function(resolve, reject){
+						canvas.toBlob(function(blob){
+							if(blob) resolve(blob);
+							else reject(new Error('图片转换失败'));
+						}, 'image/png');
+					});
+				}finally{
+					if(decoded && typeof decoded.close === 'function') decoded.close();
+				}
+			},
+			async ImageCopyToClipboard(item){
+				if(!window.isSecureContext || !navigator.clipboard || typeof navigator.clipboard.write !== 'function' || typeof window.ClipboardItem !== 'function'){
+					throw new Error('当前浏览器环境不支持复制图片，请使用 HTTPS 地址和最新版 Chrome');
+				}
+				// 把异步下载 Promise 直接交给 ClipboardItem，确保写入仍属于本次用户点击。
+				const pngPromise = this.ImageClipboardPng(item);
+				let clipboardItem;
+				try{
+					clipboardItem = new window.ClipboardItem({'image/png':pngPromise}, {presentationStyle:'inline'});
+				}catch(e){
+					clipboardItem = new window.ClipboardItem({'image/png':pngPromise});
+				}
+				await navigator.clipboard.write([clipboardItem]);
+			},
 			async ImageOperation(type){
 				if(!this.ImageMenu.data){
 					return false;
@@ -596,6 +707,22 @@
 				this.ImageMenu.show = false;
 				let self = this;
 				switch(type){
+					case 'copyImage':
+						try{
+							await this.ImageCopyToClipboard(this.ImageMenu.data);
+							self.$message({
+								message:'图片已复制，可直接粘贴到微信',
+								type:'success'
+							});
+						}catch(e){
+							const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+							self.$message({
+								message:denied ? '复制失败，请允许此网站使用剪贴板后重试' : '复制图片失败：' + ((e && e.message) || '未知错误'),
+								type:'error',
+								duration:5000
+							});
+						}
+					break;
 					case 'share'://{lang share}
 						
 						if(this.ImageParam.checkedKdys.length>1){
