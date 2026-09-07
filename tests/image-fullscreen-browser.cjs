@@ -3,7 +3,10 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 (async () => {
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({
+        headless: true,
+        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined
+    });
     try {
         const page = await browser.newPage({viewport: {width: 400, height: 800}, isMobile: true, hasTouch: true, deviceScaleFactor: 1});
         await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}.wrapper{width:240px;height:300px;overflow:hidden;transform:translate(40px,100px)}iframe{width:100%;height:100%;border:0}</style><div class="wrapper"><iframe></iframe></div>');
@@ -118,6 +121,28 @@ const path = require('node:path');
         assert.equal(await overlay.count(), 0);
         await frame.locator('img').evaluate(image => image.click());
         assert.equal(await overlay.count(), 1);
+
+        // 验证生产环境带有 opentype: 'video' 的素材在内存中秒级跳过，不发网络请求
+        await page.evaluate(() => {
+            window.dzzoffice.WindowThis.ImageDataParam.data = [
+                {dpath: 'img-a', opentype: 'image'},
+                {dpath: 'vid-1', opentype: 'video'},
+                {dpath: 'vid-2', opentype: 'video'},
+                {dpath: 'vid-3', opentype: 'video'},
+                {dpath: 'img-b', opentype: 'image'}
+            ];
+        });
+        await frame.evaluate(() => {
+            window.requests = [];
+            window.detail.path = 'img-a';
+            window.detail.paths = ['img-a'];
+        });
+        await touch('touchStart', [[1, 300, 400]]);
+        await touch('touchMove', [[1, 100, 400]]);
+        await touch('touchEnd', []);
+        await frame.waitForFunction(() => window.detail.path === 'img-b');
+        assert.deepEqual(await frame.evaluate(() => window.requests), ['img-b']);
+
         await page.locator('iframe').evaluate(element => element.remove());
         await overlay.waitFor({state: 'detached'});
         console.log('PASS Chromium mobile: tap close without controls, inline/fullscreen image-only swipes, denied/video skipping, zoom pan then edge navigation, rotation and cleanup');

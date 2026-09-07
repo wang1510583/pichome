@@ -23,10 +23,23 @@
         return {width: state.width, height: state.height, scale: scale, x: after.x - (before.x - state.x) * ratio, y: after.y - (before.y - state.y) * ratio};
     }
 
-    if (typeof module === 'object' && module.exports) module.exports = {constrain: constrain, gesture: gesture};
+    var nonImageExts = ['mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi', 'wmv', 'flv', '3gp', 'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'pdf', 'zip', 'rar', '7z', 'tar', 'gz', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'];
+    function isDefiniteNonImage(entry) {
+        if (!entry || typeof entry !== 'object') return false;
+        if (entry.opentype && entry.opentype !== 'image') return true;
+        if (entry.iniframe) return true;
+        var ext = (entry.ext || '').toLowerCase();
+        if (ext && nonImageExts.indexOf(ext) >= 0) return true;
+        return false;
+    }
+
+    if (typeof module === 'object' && module.exports) module.exports = {constrain: constrain, gesture: gesture, isDefiniteNonImage: isDefiniteNonImage};
     if (!root || !root.document) return;
 
+    var galleryEntries = [];
     var galleryPaths = [];
+    var entryMap = Object.create(null);
+    var resourceCache = Object.create(null);
     var navigating = false;
     function detailVm() {
         if (root.__pichomeImageDetail) return root.__pichomeImageDetail;
@@ -44,7 +57,17 @@
             var parentApp = root.parent.dzzoffice;
             var parentVm = parentApp && parentApp.WindowThis;
             var entries = parentVm && parentVm.ImageDataParam && parentVm.ImageDataParam.data;
-            if (entries && entries.length) galleryPaths = entries.map(function (entry) { return entry.dpath; }).filter(Boolean);
+            if (entries && entries.length) {
+                galleryEntries = entries.slice();
+                galleryPaths = [];
+                for (var i = 0; i < entries.length; i++) {
+                    var item = entries[i];
+                    if (item && item.dpath) {
+                        galleryPaths.push(item.dpath);
+                        entryMap[item.dpath] = item;
+                    }
+                }
+            }
         } catch (ignore) {}
         if (!galleryPaths.length) galleryPaths = (detail.paths || []).slice();
         var index = galleryPaths.indexOf(detail.path);
@@ -53,15 +76,32 @@
         try {
             for (index += direction; index >= 0 && index < galleryPaths.length; index += direction) {
                 var path = galleryPaths[index];
-                var response = await root.axios.post(root.MOD_URL + '&operation=fetch', {path: path, isadmin: detail.isadmin});
-                if (!active()) return null;
-                var result = response && response.data;
-                if (!result || result.error || !result.resourcesdata) continue;
-                if (result.resourcesdata.opentype !== 'image' || result.resourcesdata.iniframe) continue;
+                if (resourceCache[path] === false) continue;
+                var entry = entryMap[path] || (galleryEntries[index] && galleryEntries[index].dpath === path ? galleryEntries[index] : null);
+                if (isDefiniteNonImage(entry)) {
+                    resourceCache[path] = false;
+                    continue;
+                }
+                var resourcesdata = resourceCache[path];
+                if (!resourcesdata) {
+                    var response = await root.axios.post(root.MOD_URL + '&operation=fetch', {path: path, isadmin: detail.isadmin});
+                    if (!active()) return null;
+                    var result = response && response.data;
+                    if (!result || result.error || !result.resourcesdata) {
+                        resourceCache[path] = false;
+                        continue;
+                    }
+                    if (result.resourcesdata.opentype !== 'image' || result.resourcesdata.iniframe) {
+                        resourceCache[path] = false;
+                        continue;
+                    }
+                    resourcesdata = result.resourcesdata;
+                    resourceCache[path] = resourcesdata;
+                }
                 detail.paths = [path];
                 detail.ridIndex = 0;
                 detail.path = path;
-                await detail.CommonOrder(result.resourcesdata);
+                await detail.CommonOrder(resourcesdata);
                 await detail.$nextTick();
                 return root.document.querySelector('.detail-popup-content.center .img-box img.max');
             }
