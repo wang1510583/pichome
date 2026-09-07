@@ -24,16 +24,33 @@
     }
 
     var nonImageExts = ['mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi', 'wmv', 'flv', '3gp', 'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'pdf', 'zip', 'rar', '7z', 'tar', 'gz', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'];
+    var imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tif', 'tiff', 'heic', 'avif'];
+    function isImagePayload(item) {
+        if (!item || typeof item !== 'object') return false;
+        if (item.iniframe) return false;
+        var opentype = (item.opentype || item.type || '').toLowerCase();
+        if (opentype && (opentype.indexOf('image') >= 0 || opentype === 'other')) return true;
+        var ext = (item.ext || '').toLowerCase();
+        if (ext && imageExts.indexOf(ext) >= 0) return true;
+        return false;
+    }
     function isDefiniteNonImage(entry) {
         if (!entry || typeof entry !== 'object') return false;
-        if (entry.opentype && entry.opentype !== 'image') return true;
+        var opentype = (entry.opentype || entry.type || '').toLowerCase();
+        if (opentype) {
+            if (opentype.indexOf('video') >= 0 || opentype.indexOf('audio') >= 0 || opentype === 'document' || opentype === 'attachment') return true;
+            if (opentype.indexOf('image') >= 0 || opentype === 'other') return false;
+        }
         if (entry.iniframe) return true;
         var ext = (entry.ext || '').toLowerCase();
-        if (ext && nonImageExts.indexOf(ext) >= 0) return true;
+        if (ext) {
+            if (nonImageExts.indexOf(ext) >= 0) return true;
+            if (imageExts.indexOf(ext) >= 0) return false;
+        }
         return false;
     }
 
-    if (typeof module === 'object' && module.exports) module.exports = {constrain: constrain, gesture: gesture, isDefiniteNonImage: isDefiniteNonImage};
+    if (typeof module === 'object' && module.exports) module.exports = {constrain: constrain, gesture: gesture, isDefiniteNonImage: isDefiniteNonImage, isImagePayload: isImagePayload};
     if (!root || !root.document) return;
 
     var galleryEntries = [];
@@ -91,7 +108,7 @@
                         resourceCache[path] = false;
                         continue;
                     }
-                    if (result.resourcesdata.opentype !== 'image' || result.resourcesdata.iniframe) {
+                    if (!isImagePayload(result.resourcesdata)) {
                         resourceCache[path] = false;
                         continue;
                     }

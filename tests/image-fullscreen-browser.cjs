@@ -122,14 +122,14 @@ const path = require('node:path');
         await frame.locator('img').evaluate(image => image.click());
         assert.equal(await overlay.count(), 1);
 
-        // 验证生产环境带有 opentype: 'video' 的素材在内存中秒级跳过，不发网络请求
+        // 验证生产环境带有 commonimage 和 opentype: 'video' 的素材：跳过视频，秒切 commonimage
         await page.evaluate(() => {
             window.dzzoffice.WindowThis.ImageDataParam.data = [
-                {dpath: 'img-a', opentype: 'image'},
-                {dpath: 'vid-1', opentype: 'video'},
-                {dpath: 'vid-2', opentype: 'video'},
-                {dpath: 'vid-3', opentype: 'video'},
-                {dpath: 'img-b', opentype: 'image'}
+                {dpath: 'img-a', opentype: 'commonimage', ext: 'jpg'},
+                {dpath: 'vid-1', opentype: 'video', ext: 'mp4'},
+                {dpath: 'vid-2', opentype: 'video', ext: 'mp4'},
+                {dpath: 'vid-3', opentype: 'video', ext: 'mp4'},
+                {dpath: 'img-b', opentype: 'commonimage', ext: 'png'}
             ];
         });
         await frame.evaluate(() => {

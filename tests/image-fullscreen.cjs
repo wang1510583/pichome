@@ -3,17 +3,28 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const filename = path.join(__dirname, '../web/dzz/details/template/mobile/assets/js/image-fullscreen.js');
-const {gesture, constrain, isDefiniteNonImage} = require(filename);
+const {gesture, constrain, isDefiniteNonImage, isImagePayload} = require(filename);
 
 assert.equal(isDefiniteNonImage(null), false);
 assert.equal(isDefiniteNonImage('raw-path'), false);
 assert.equal(isDefiniteNonImage({opentype: 'video'}), true);
 assert.equal(isDefiniteNonImage({opentype: 'audio'}), true);
+assert.equal(isDefiniteNonImage({opentype: 'document'}), true);
 assert.equal(isDefiniteNonImage({opentype: 'image'}), false);
+assert.equal(isDefiniteNonImage({opentype: 'commonimage'}), false);
+assert.equal(isDefiniteNonImage({type: 'commonimage'}), false);
 assert.equal(isDefiniteNonImage({ext: 'mp4'}), true);
 assert.equal(isDefiniteNonImage({ext: 'MOV'}), true);
 assert.equal(isDefiniteNonImage({ext: 'jpg'}), false);
+assert.equal(isDefiniteNonImage({ext: 'png'}), false);
 assert.equal(isDefiniteNonImage({iniframe: 'some-url'}), true);
+
+assert.equal(isImagePayload({opentype: 'commonimage'}), true);
+assert.equal(isImagePayload({type: 'commonimage'}), true);
+assert.equal(isImagePayload({opentype: 'image'}), true);
+assert.equal(isImagePayload({ext: 'jpg'}), true);
+assert.equal(isImagePayload({opentype: 'video'}), false);
+assert.equal(isImagePayload({opentype: 'image', iniframe: 'url'}), false);
 
 const initial = {width: 400, height: 800, scale: 1, x: 0, y: 0};
 const zoomed = gesture(initial, [{x: 100, y: 400}, {x: 300, y: 400}], [{x: 0, y: 450}, {x: 400, y: 450}]);
