@@ -9,8 +9,9 @@
 	</div>
 	<div v-else class="detail-popup-img">
 		<div v-if="item.data.iniframe" class="video-box" :style="{'height':item.data.fheight?item.data.fheight+'px':'100%'}">
+			<img v-if="item.data.originalimg || item.data.icondata" :src="item.data.originalimg || item.data.icondata" class="video-cover-poster" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;z-index:0;background:#000;" />
 			<iframe
-				style="border: 0px;"
+				style="border: 0px;position:relative;z-index:1;background:transparent;"
 				allow="autoplay; fullscreen"
 				:data-pichome-frame-rid="item.data.rid"
 				:data-pichome-frame-path="item.id"

@@ -152,6 +152,13 @@ $pichomeCacheRid = !empty($resourcesdata['rid'])
     ? (string)$resourcesdata['rid']
     : (!empty($_GET['pichome_rid']) ? (string)$_GET['pichome_rid'] : '');
 if (strlen($pichomeCacheRid) > 256) $pichomeCacheRid = '';
+$pichomePoster = !empty($resourcesdata['originalimg'])
+    ? (string)$resourcesdata['originalimg']
+    : (!empty($resourcesdata['icondata']) ? (string)$resourcesdata['icondata'] : '');
+$pichomePosterJson = json_encode(
+    (string)$pichomePoster,
+    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+);
 $pichomePlayerSourceJson = json_encode(
     (string)$src,
     JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
