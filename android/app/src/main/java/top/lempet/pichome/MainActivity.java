@@ -994,6 +994,7 @@ public class MainActivity extends Activity {
             return;
         }
         String closeOverlayScript = "(function(){"
+                + "if(window.__pichomeCloseImageFullscreen&&window.__pichomeCloseImageFullscreen())return true;"
                 + "var mask=document.querySelector('.mobile-sidebar-mask');"
                 + "if(mask){mask.click();return true;}"
                 + "var details=document.querySelector('.Details-Iframe');"

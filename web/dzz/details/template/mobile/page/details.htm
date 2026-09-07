@@ -1,7 +1,8 @@
 <!--{template common/container/pc/header_start}-->
+<script src="{MOD_PATH}/template/mobile/assets/js/image-fullscreen.js?{VERHASH}-fullscreen-3" type="text/javascript" charset="utf-8"></script>
 <script src="{MOD_PATH}/template/mobile/assets/js/pinchzoom.js?{VERHASH}" type="text/javascript" charset="utf-8"></script>
 <script src="{MOD_PATH}/template/mobile/assets/js/JsCollect.js?{VERHASH}" type="text/javascript" charset="utf-8"></script>
-<script src="{MOD_PATH}/template/pc/assets/js/frame-scrub.js?{VERHASH}-mobile-frame-2" type="text/javascript" charset="utf-8"></script>
+<script src="{MOD_PATH}/template/pc/assets/js/frame-scrub.js?{VERHASH}-mobile-frame-3" type="text/javascript" charset="utf-8"></script>
 <link rel="stylesheet" type="text/css" href="{MOD_PATH}/template/mobile/assets/css/details.css?{VERHASH}" />
 <script type="text/javascript" src="static/js/watermark.js?{VERHASH}"></script>
 <style>
@@ -287,7 +288,7 @@
 		},
 		mixins:[HeaderMixin,MainMixin,MessageMixin,FooterMixin,ShareAddDialogMixin],
 		methods:{
-			async CommonOrder(){
+			async CommonOrder(resourcesdata){
 				var self = this;
 				self.MobileMirrorPreview = false;
 				var NewShowData = [];
@@ -362,7 +363,7 @@
 						this.showdataindex = i;
 					}
 					if(NewShowData[i].loading){
-						await this.GetData(i,NewShowData[i]);
+						await this.GetData(i,NewShowData[i],NewShowData[i].type == 'center' ? resourcesdata : null);
 					}else{
 						if(NewShowData[i].type == 'center'){
 							self.ParamImages.operation.rids = [NewShowData[i].data.rid];
@@ -401,9 +402,9 @@
 				}
 				this.previews.active = index;
 			},
-			async GetData(index,fitem){
+			async GetData(index,fitem,resourcesdata){
 				var self = this;
-				var res = await axios.post(MOD_URL+'&operation=fetch',{
+				var res = resourcesdata ? {data:{status:1,resourcesdata:resourcesdata}} : await axios.post(MOD_URL+'&operation=fetch',{
 					path:fitem.id,
 					isadmin:this.isadmin
 				});
@@ -485,7 +486,7 @@
 					}
 				}
 				var paths = sessionStorage.getItem('imgs');
-				if(paths){
+				if(paths && !resourcesdata){
 					paths = paths.split(',');
 					if(self.paths.length != paths.length){
 						self.paths = paths;
@@ -564,7 +565,7 @@
 
 	// 屏蔽警告信息
 	dzzoffice.config.warnHandler = function(){return null};
-	dzzoffice.mount('#dzzoffice');
+	window.__pichomeImageDetail = dzzoffice.mount('#dzzoffice');
 </script>
 
 <!--{template common/container/pc/footer}-->
