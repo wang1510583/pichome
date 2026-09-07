@@ -290,12 +290,14 @@
 					for (var p = 0; p < parentList.length; p++) {
 						var pItem = parentList[p];
 						if (pItem && pItem.dpath) {
-							if (pItem.opentype === 'video' && !pItem.fheight && pItem.width && pItem.height) {
+							var copy = Object.assign({}, pItem);
+							copy._preload = true;
+							if (copy.opentype === 'video' && !copy.fheight && copy.width && copy.height) {
 								var bW = document.body.clientWidth || window.innerWidth;
-								pItem.fwidth = bW;
-								pItem.fheight = (bW / parseFloat(pItem.width)) * parseFloat(pItem.height);
+								copy.fwidth = bW;
+								copy.fheight = (bW / parseFloat(copy.width)) * parseFloat(copy.height);
 							}
-							this.storagedata[pItem.dpath] = pItem;
+							this.storagedata[pItem.dpath] = copy;
 						}
 					}
 				}
@@ -383,8 +385,11 @@
 					}else{
 						if(NewShowData[i].type == 'center'){
 							self.ParamImages.operation.rids = [NewShowData[i].data.rid];
-							if(NewShowData[i].data.opentype == 'image' || NewShowData[i].data.opentype == 'other'){
+							if(NewShowData[i].data.opentype == 'image' || NewShowData[i].data.opentype == 'other' || NewShowData[i].data.opentype == 'commonimage'){
 								this.CommonZomm(NewShowData[i]);
+							}
+							if(NewShowData[i].data._preload){
+								this.RefreshPreloadData(i,NewShowData[i]);
 							}
 						}
 						
@@ -417,6 +422,72 @@
 					curr.data.originalimg = this.previews.data[index].lpath;
 				}
 				this.previews.active = index;
+			},
+			async RefreshPreloadData(index,fitem){
+				var self = this;
+				try{
+					var res = await axios.post(MOD_URL+'&operation=fetch',{
+						path:fitem.id,
+						isadmin:this.isadmin
+					});
+					if(res == 'intercept') return false;
+					var json = res.data;
+					if(json.error || !json.resourcesdata) return false;
+					var item = json.resourcesdata;
+					if(self.showdata[index] && self.showdata[index].id !== fitem.id) return false;
+					var colors = [];
+					if(item.colors){
+						for(var c in item.colors){
+							colors.push(item.colors[c]);
+						}
+					}
+					item.colors = colors;
+					var tags = [];
+					if(item.tag){
+						for(var t in item.tag){
+							tags.push({key:t,val:item.tag[t]});
+						}
+					}
+					item.tag = tags;
+					var foldernames = [];
+					if(item.foldernames){
+						for(var f in item.foldernames){
+							foldernames.push({key:f,val:item.foldernames[f]});
+						}
+					}
+					item.foldernames = foldernames;
+					document.title = item.name+`-$_G['setting']['sitename']`;
+					if(item.link || item.download || parseInt(self.DocumentAdminId) || item.share || parseInt(item.collection)){
+						item['footer'] = true;
+					}else{
+						item['footer'] = false;
+					}
+					if(item.opentype == 'video'){
+						var boxW = document.body.clientWidth;
+						var ra = boxW/parseFloat(item['width']);
+						item['fwidth'] = boxW;
+						item['fheight'] = ra*parseFloat(item['height']);
+					}
+					var keepFrame = !!(item.iniframe && fitem.data && fitem.data.iniframe);
+					if(keepFrame){
+						// 保持已起播的播放器 iframe 不被 Vue 重建：沿用旧 iniframe 地址与封面
+						item.iniframe = fitem.data.iniframe;
+						if(fitem.data.originalimg) item.originalimg = fitem.data.originalimg;
+					}
+					self.storagedata[fitem.id] = item;
+					self.showdata[index].data = item;
+					self.$forceUpdate();
+					self.ParamImages.operation.rids = [item.rid];
+					if(item.opentype == 'image' || item.opentype == 'other' || item.opentype == 'commonimage'){
+						self.$nextTick(function(){
+							self.CommonZomm(fitem);
+						});
+					}
+					if(item.preview && item.preview.length){
+						self.previews.data = item.preview;
+						item.originalimg = item.preview[0].lpath;
+					}
+				}catch(error){}
 			},
 			async GetData(index,fitem,resourcesdata){
 				var self = this;
