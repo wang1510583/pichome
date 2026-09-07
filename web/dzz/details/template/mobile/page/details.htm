@@ -284,6 +284,22 @@
 			}
 			
 			this.ridIndex = parseInt(sessionStorage.getItem('selectindex'));
+			try {
+				if (window.parent && window.parent.dzzoffice && window.parent.dzzoffice.WindowThis && window.parent.dzzoffice.WindowThis.ImageDataParam) {
+					var parentList = window.parent.dzzoffice.WindowThis.ImageDataParam.data || [];
+					for (var p = 0; p < parentList.length; p++) {
+						var pItem = parentList[p];
+						if (pItem && pItem.dpath) {
+							if (pItem.opentype === 'video' && !pItem.fheight && pItem.width && pItem.height) {
+								var bW = document.body.clientWidth || window.innerWidth;
+								pItem.fwidth = bW;
+								pItem.fheight = (bW / parseFloat(pItem.width)) * parseFloat(pItem.height);
+							}
+							this.storagedata[pItem.dpath] = pItem;
+						}
+					}
+				}
+			} catch(e) {}
 			this.CommonOrder();
 		},
 		mixins:[HeaderMixin,MainMixin,MessageMixin,FooterMixin,ShareAddDialogMixin],
