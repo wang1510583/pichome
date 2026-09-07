@@ -125,9 +125,14 @@
 				div.className = 'Details-Iframe';
 				let div1 = document.createElement("div");
 				div1.className = 'Details-Iframe-wrapper';
-				div.onclick=function(){
-					let div2 = document.querySelector('.Details-Iframe');
-					document.body.removeChild(div2);
+				div.onclick=function(e){
+					if(e.target === div){
+						let div2 = document.querySelector('.Details-Iframe');
+						if(div2) document.body.removeChild(div2);
+					}
+				}
+				div1.onclick=function(e){
+					e.stopPropagation();
 				}
 				div.append(div1);
 				document.body.appendChild(div);
