@@ -123,10 +123,13 @@
 
 				let div = document.createElement("div");
 				div.className = 'Details-Iframe';
+				if(curr && (curr.opentype == 'image' || curr.opentype == 'commonimage' || curr.type == 'commonimage' || (curr.ext && ['jpg','jpeg','png','gif','webp','bmp','svg'].indexOf(String(curr.ext).toLowerCase())>=0)) && !curr.iniframe){
+					div.classList.add('pichome-is-image-detail');
+				}
 				let div1 = document.createElement("div");
 				div1.className = 'Details-Iframe-wrapper';
 				div.onclick=function(e){
-					if(e.target === div){
+					if(e.target === div && div.classList.contains('pichome-is-image-detail')){
 						let div2 = document.querySelector('.Details-Iframe');
 						if(div2) document.body.removeChild(div2);
 					}
