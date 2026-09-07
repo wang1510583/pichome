@@ -1,4 +1,5 @@
 <el-drawer
+	v-if="InformationPopup"
 	v-model:model-value="InformationPopup"
 	class="detail-popup-message"
 	:class="showdata[showdataindex] && !showdata[showdataindex].data.footer?'noPadding':''"

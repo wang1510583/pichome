@@ -470,7 +470,9 @@
 			},
 			headerHideInformation(status){//隐藏图片信息
 				this.HideInformation = status;
-
+				try {
+					localStorage.setItem('pichome_hide_information', String(status));
+				} catch(e){}
 			},
 			headergoBack(){
 				let div = window.parent.document.querySelector('.Details-Iframe');

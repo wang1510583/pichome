@@ -97,7 +97,13 @@
 				DocumentRefresh:1,
 				DocumentHref:'',
 				DocumentAdminId:'$_G['adminid']',
-				HideInformation: false,
+				HideInformation: (function(){
+					try {
+						var saved = localStorage.getItem('pichome_hide_information');
+						if (saved !== null) return saved === 'true';
+					} catch(e){}
+					return document.body.clientWidth <= 992;
+				})(),
 				IsFullScreen:false,
 				imagesData: {},
 				currentData:[],
@@ -637,10 +643,15 @@
 		},
 		mounted() {
 			var self = this;
-			if(document.body.clientWidth>992){
-
-			}else{
-				this.HideInformation = true;
+			try {
+				var saved = localStorage.getItem('pichome_hide_information');
+				if (saved !== null) {
+					this.HideInformation = saved === 'true';
+				} else if (document.body.clientWidth <= 992) {
+					this.HideInformation = true;
+				}
+			} catch(e) {
+				if(document.body.clientWidth <= 992) this.HideInformation = true;
 			}
 			window.onkeydown = function(event){ //event可以简写成 e
 				if(self.FramePreviewHandleKeydown(event,document)) return;
