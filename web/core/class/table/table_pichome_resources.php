@@ -173,8 +173,8 @@ class table_pichome_resources extends dzz_table
     //删除文件到回收站
     public function recycle_data_by_rids($rids)
     {
-        foreach (DB::fetch_all("select fids,rid from %t where rid in(%n) ", array($this->_table, $rids)) as $v) {
-            if (parent::update($v['rid'], array('isdelete' => 1))) {
+        foreach (DB::fetch_all("select fids,rid from %t where rid in(%n) and isdelete=0 ", array($this->_table, $rids)) as $v) {
+            if (parent::update($v['rid'], array('isdelete' => 1, 'lastdate' => TIMESTAMP))) {
                 $fids = $v['fids'];
                 $fidarr = explode(',', $fids);
                 C::t('pichome_folder')->add_filenum_by_fid($fidarr, -1);
@@ -187,8 +187,8 @@ class table_pichome_resources extends dzz_table
     //从回收站恢复文件
     public function recover_file_by_rids($rids)
     {
-        foreach (DB::fetch_all("select fids,rid from %t where rid in(%n) ", array($this->_table, $rids)) as $v) {
-            if (parent::update($v['rid'], array('isdelete' => 0))) {
+        foreach (DB::fetch_all("select fids,rid from %t where rid in(%n) and isdelete=1 ", array($this->_table, $rids)) as $v) {
+            if (parent::update($v['rid'], array('isdelete' => 0, 'lastdate' => TIMESTAMP))) {
                 $fids = $v['fids'];
                 $fidarr = explode(',', $fids);
                 C::t('pichome_folder')->add_filenum_by_fid($fidarr, 1);
@@ -388,7 +388,7 @@ class table_pichome_resources extends dzz_table
     }
 
     //获取文件图片地址
-    public function getfileimageurl($resourcesdata, $apppath, $apptype, $download,$return = 0)
+    public function getfileimageurl($resourcesdata, $apppath, $apptype, $download,$return = 0, $signedPreview = false)
     {
 
         $imgdata = [];
@@ -410,6 +410,10 @@ class table_pichome_resources extends dzz_table
             //大图参数
             $largethumbparams = ['rid' => $resourcesdata['rid'], 'hash' => VERHASH, 'download' => $download,
                 'thumbsign' => '1','path'=>$resourcesdata['path'], 'ext' => $resourcesdata['ext'], 'appid' => $resourcesdata['appid'],'hasthumb'=>$resourcesdata['hasthumb']];
+            if ($signedPreview) {
+                $stableSmallUrl = getglobal('siteurl') . 'index.php?mod=io&op=getImg&path=' . rawurlencode(Pencode($smallthumbparams, 3600));
+                $stableLargeUrl = getglobal('siteurl') . 'index.php?mod=io&op=getImg&path=' . rawurlencode(Pencode($largethumbparams, 3600));
+            }
             if ($apptype == 3) {
                 if($previewdata = DB::fetch_first("select * from %t where rid = %s and iscover = %d",['thumb_preview',$resourcesdata['rid'],1])){
                     $imgdata['icondata'] = ($previewdata['sstatus']) ? IO::getFileUri($previewdata['spath']): IO::getFileUri($previewdata['opath']);
@@ -633,7 +637,7 @@ class table_pichome_resources extends dzz_table
             $resourcesdata['isdetail'] = 1;
             $resourcesdata['dpath'] = Pencode(array('path' => $rid, 'perm' => $perm, 'ishare' => 0, 'isadmin' => 1), 3600);
             $resourcesdata['isFilelistThumb'] = 1;
-            $imgdata = $this->getfileimageurl($resourcesdata, $appdata['path'], $appdata['type'], $resourcesdata['download'], 1);
+            $imgdata = $this->getfileimageurl($resourcesdata, $appdata['path'], $appdata['type'], $resourcesdata['download'], 1, (bool)$nolevel);
             if (!$imgdata['icondata'] && $imgdata['iconimg']) $imgdata['icondata'] = $imgdata['iconimg'];
             $resourcesdata = array_merge($resourcesdata, $imgdata);
 
@@ -769,11 +773,11 @@ class table_pichome_resources extends dzz_table
                 if(isset($imagedatas[$v['rid']]['height']))$imgdata['height'] = $imagedatas[$v['rid']]['height'];
                 if($downshare[$v['appid']]['type'] == 1 && !$imgdata['icondata']){
                     $v['isFilelistThumb'] = 1;
-                    $tmpimagedata =  $this->getfileimageurl($v, $downshare[$v['appid']]['path'], $downshare[$v['appid']]['type'], $v['download']);
+                    $tmpimagedata =  $this->getfileimageurl($v, $downshare[$v['appid']]['path'], $downshare[$v['appid']]['type'], $v['download'], 0, (bool)$perm);
                    $imgdata = array_merge($imgdata,$tmpimagedata);
                 }
             } else {
-                $imgdata = $this->getfileimageurl($v, $downshare[$v['appid']]['path'], $downshare[$v['appid']]['type'], $v['download']);
+                $imgdata = $this->getfileimageurl($v, $downshare[$v['appid']]['path'], $downshare[$v['appid']]['type'], $v['download'], 0, (bool)$perm);
             }
             $v['hasthumb'] = $imagedatas[$v['rid']]['imgstatus'] ? intval($imagedatas[$v['rid']]['imgstatus']): (isset($v['hasthumb']) ? intval($v['hasthumb']) : 0);
             $v = array_merge($v, $imgdata);
@@ -927,40 +931,24 @@ class table_pichome_resources extends dzz_table
     //移动文件目录 复制或剪切
     public function move_file_to_folder($rid, $fid, $iscopy = 1)
     {
-        //查询文件基本信息
         $data = parent::fetch($rid);
-        if (!$data) return false;
-        //目标文件夹 pathkey(用于 folderresources.pathkey 关联计数)
-        $fpathkey = '';
-        if ($fid) {
-            $fdata = C::t('pichome_folder')->fetch($fid);
-            if ($fdata && isset($fdata['pathkey'])) $fpathkey = $fdata['pathkey'];
+        if (!$data || !empty($data['isdelete'])
+            || !C::t('pichome_vappmember')->checkuserperm_by_appid($data['appid'])) return false;
+        $fid = $fid === 'root' ? '' : trim(strval($fid));
+        $folder = $fid !== '' ? C::t('pichome_folder')->fetch($fid) : array();
+        if ($fid !== '' && (!$folder || $folder['appid'] !== $data['appid'])) return false;
+        $oldFids = array_values(array_filter(explode(',', strval($data['fids']))));
+        $nextFids = $iscopy ? $oldFids : array();
+        if ($fid !== '' && !in_array($fid, $nextFids, true)) $nextFids[] = $fid;
+        $result = C::t('#eagle#eagle_record')->update_item_metadata($rid, $data['appid'], array('fids' => $nextFids));
+        if (!$result['success']) return false;
+        if (!$iscopy && $oldFids) C::t('pichome_folderresources')->delete_by_ridfid($rid, $oldFids);
+        if ($fid !== '' && (!$iscopy || !in_array($fid, $oldFids, true))) {
+            C::t('pichome_folderresources')->insert(array(
+                'appid' => $data['appid'], 'rid' => $rid, 'fid' => $fid, 'pathkey' => $folder['pathkey']
+            ));
         }
-        //如果是复制增加目录
-        if ($iscopy) {
-            //原有fid
-            $ofids = $data['fids'] ? explode(',', $data['fids']) : [];
-            $rfolder = ['appid' => $data['appid'], 'rid' => $rid, 'fid' => $fid, 'pathkey' => $fpathkey];
-            C::t('pichome_folderresources')->insert($rfolder);
-            if (!in_array($fid, $ofids)) {
-                $ofids[] = $fid;
-                $attrs = ['fids' => implode(',', $ofids), 'lastdate' => TIMESTAMP];
-                C::t('pichome_resources')->update_by_rids($data['appid'], $rid, $attrs);
-            }
-            return true;
-        } else {//如果是剪切
-            //原有fid
-            $ofids = $data['fids'] ? explode(',', $data['fids']) : [];
-            //移除原目录属性
-            C::t('pichome_folderresources')->delete_by_ridfid($rid, $ofids);
-            //添加新目录属性
-            $rfolder = ['appid' => $data['appid'], 'rid' => $rid, 'fid' => $fid, 'pathkey' => $fpathkey];
-            C::t('pichome_folderresources')->insert($rfolder);
-            $attrs = ['fids' => $fid, 'lastdate' => TIMESTAMP];
-            C::t('pichome_resources')->update_by_rids($data['appid'], $rid, $attrs);
-            return true;
-        }
-        return false;
+        return $this->update_by_rids($data['appid'], $rid, array('fids' => implode(',', $nextFids), 'lastdate' => TIMESTAMP));
     }
 
     public function upload_file($data, $attrover = 1)

@@ -4,92 +4,23 @@ if (!defined('IN_OAOOA')) {
 }
 $operation = isset($_GET['operation']) ? trim($_GET['operation']):'';
 
-/**
- * Keep deletions from an Eagle library persistent. Pichome's type-0 library
- * is only an index; Eagle's metadata.json is the source of truth.
- */
-function pichome_mark_eagle_deleted($rids)
+function pichome_set_deleted_state($rids, $deleted)
 {
-    global $_G;
-    $rows = DB::fetch_all(
-        'select r.rid,r.appid,v.type,v.path,v.uid from %t r inner join %t v on v.appid=r.appid where r.rid in(%n)',
-        array('pichome_resources', 'pichome_vapp', $rids)
-    );
-
+    $rids = array_values(array_unique(array_filter($rids)));
+    if (!$rids) return array('success' => false, 'msg' => lang('params_error'));
+    $rows = C::t('pichome_resources')->fetch_all($rids);
+    if (count($rows) !== count($rids)) return array('success' => false, 'msg' => '素材不存在');
     foreach ($rows as $row) {
-        if (intval($row['type']) !== 0) continue;
-        if (intval($_G['adminid']) !== 1 && intval($row['uid']) !== intval($_G['uid'])) {
-            return array('success' => false, 'msg' => '没有 Eagle 素材库删除权限');
+        if (intval($row['isdelete']) > 1) return array('success' => false, 'msg' => '素材已被彻底删除');
+        if (!C::t('pichome_vappmember')->checkuserperm_by_appid($row['appid'])) {
+            return array('success' => false, 'msg' => '没有素材库写入权限');
         }
-
-        $library = realpath($row['path']);
-        if (!$library || !is_dir($library) || !is_writable($library)) {
-            return array('success' => false, 'msg' => 'Eagle 素材库目录不可写');
-        }
-        $eid = C::t('#eagle#eagle_record')->fetch_eid_by_rid($row['rid'], $row['appid']);
-        if (!$eid || !preg_match('/^[A-Z0-9]+$/i', $eid)) {
-            return array('success' => false, 'msg' => '没有找到对应的 Eagle 素材记录');
-        }
-
-        $imagesroot = realpath($library . DIRECTORY_SEPARATOR . 'images');
-        $itemdir = realpath($library . DIRECTORY_SEPARATOR . 'images' . DIRECTORY_SEPARATOR . $eid . '.info');
-        if (!$imagesroot || !$itemdir || strpos($itemdir . DIRECTORY_SEPARATOR, $imagesroot . DIRECTORY_SEPARATOR) !== 0) {
-            return array('success' => false, 'msg' => 'Eagle 素材路径无效');
-        }
-        $metadatafile = $itemdir . DIRECTORY_SEPARATOR . 'metadata.json';
-        if (!is_file($metadatafile) || !is_writable($metadatafile)) {
-            return array('success' => false, 'msg' => 'Eagle metadata.json 不可写');
-        }
-
-        $lockfile = $metadatafile . '.lock';
-        $lock = @fopen($lockfile, 'c+');
-        if ($lock) @chmod($lockfile, 0664);
-        if (!$lock || !flock($lock, LOCK_EX)) {
-            if ($lock) fclose($lock);
-            return array('success' => false, 'msg' => '无法锁定 Eagle 素材信息');
-        }
-        $metadata = json_decode(file_get_contents($metadatafile), true);
-        if (!is_array($metadata)) {
-            flock($lock, LOCK_UN);
-            fclose($lock);
-            return array('success' => false, 'msg' => 'Eagle metadata.json 格式错误');
-        }
-        $nowms = (int) round(microtime(true) * 1000);
-        $metadata['isDeleted'] = true;
-        $metadata['modificationTime'] = $nowms;
-        $metadata['lastModified'] = $nowms;
-        $tmpfile = $metadatafile . '.tmp.' . getmypid();
-        $jsonflags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
-        $saved = file_put_contents($tmpfile, json_encode($metadata, $jsonflags), LOCK_EX) !== false
-            && @rename($tmpfile, $metadatafile);
-        if (!$saved) @unlink($tmpfile);
-        @chmod($metadatafile, 0664);
-        flock($lock, LOCK_UN);
-        fclose($lock);
-        if (!$saved) return array('success' => false, 'msg' => '无法更新 Eagle 素材删除状态');
-
-        // Notify Eagle and the next Pichome scan that this item changed.
-        $mtimefile = $library . DIRECTORY_SEPARATOR . 'mtime.json';
-        $mtimelockfile = $mtimefile . '.lock';
-        $mtimelock = @fopen($mtimelockfile, 'c+');
-        if ($mtimelock) @chmod($mtimelockfile, 0664);
-        if ($mtimelock && flock($mtimelock, LOCK_EX)) {
-            $mtimedata = is_file($mtimefile) ? json_decode(file_get_contents($mtimefile), true) : array();
-            if (!is_array($mtimedata)) $mtimedata = array();
-            $mtimedata[$eid] = $nowms;
-            $mtimedata['all'] = isset($mtimedata['all']) ? intval($mtimedata['all']) + 1 : 1;
-            $mtimetmp = $mtimefile . '.tmp.' . getmypid();
-            if (file_put_contents($mtimetmp, json_encode($mtimedata, $jsonflags), LOCK_EX) !== false) {
-                @rename($mtimetmp, $mtimefile);
-                @chmod($mtimefile, 0664);
-            } else {
-                @unlink($mtimetmp);
-            }
-            flock($mtimelock, LOCK_UN);
-            fclose($mtimelock);
-        } elseif ($mtimelock) {
-            fclose($mtimelock);
-        }
+    }
+    foreach ($rows as $row) {
+        $result = C::t('#eagle#eagle_record')->update_item_metadata($row['rid'], $row['appid'], array('isDeleted' => $deleted));
+        if (!$result['success']) return $result;
+        if ($deleted) C::t('pichome_resources')->recycle_data_by_rids(array($row['rid']));
+        else C::t('pichome_resources')->recover_file_by_rids(array($row['rid']));
     }
     return array('success' => true);
 }
@@ -98,15 +29,25 @@ if($operation == 'deletefile'){//删除文件到回收站
     $rids = isset($_GET['rids']) ? trim($_GET['rids']):'';
     $rids = array_values(array_filter(explode(',',$rids)));
     if (!$rids) exit(json_encode(array('success'=>false,'msg'=>lang('params_error'))));
-    $eagleresult = pichome_mark_eagle_deleted($rids);
-    if (!$eagleresult['success']) exit(json_encode($eagleresult));
-    C::t('pichome_resources')->recycle_data_by_rids($rids);
-    exit(json_encode(array('success'=>true)));
+    exit(json_encode(pichome_set_deleted_state($rids, true)));
 }elseif($operation == 'removefolder'){//将文件从目录中移除
     $fid = isset($_GET['fid']) ? trim($_GET['fid']):'';
     $rids = isset($_GET['rids']) ? trim($_GET['rids']):'';
     $rids = explode(',',$rids);
-    C::t('pichome_folderresources')->delete_by_ridfid($rids,$fid);
+    $folder = C::t('pichome_folder')->fetch($fid);
+    if (!$folder || !C::t('pichome_vappmember')->checkuserperm_by_appid($folder['appid'])) {
+        exit(json_encode(array('success' => false, 'msg' => lang('no_perm'))));
+    }
+    foreach (array_unique(array_filter($rids)) as $rid) {
+        $resource = C::t('pichome_resources')->fetch($rid);
+        if (!$resource || $resource['appid'] !== $folder['appid']) {
+            exit(json_encode(array('success' => false, 'msg' => lang('params_error'))));
+        }
+        $nextFids = array_values(array_diff(array_filter(explode(',', $resource['fids'])), array($fid)));
+        $result = C::t('#eagle#eagle_record')->update_item_metadata($rid, $resource['appid'], array('fids' => $nextFids));
+        if (!$result['success']) exit(json_encode($result));
+        C::t('pichome_folderresources')->delete_by_ridfid(array($rid), $fid);
+    }
     exit(json_encode(array('success'=>true)));
 }elseif($operation == 'finallydel'){//彻底删除文件
     if(getglobal('adminid') != 1){
@@ -119,8 +60,7 @@ if($operation == 'deletefile'){//删除文件到回收站
 }elseif($operation == 'recoverfile'){//恢复文件
     $rids = isset($_GET['rids']) ? trim($_GET['rids']):'';
     $rids = explode(',',$rids);
-    C::t('pichome_resources')->recover_file_by_rids($rids,['isdelete'=>0]);
-    exit(json_encode(array('success'=>true)));
+    exit(json_encode(pichome_set_deleted_state($rids, false)));
 }elseif($operation == 'emptyrecycle'){//清空回收站
     $appid = isset($_GET['appid']) ? trim($_GET['appid']):'';
     if(!$appid)exit(json_encode(array('success'=>false,'msg'=>lang('params_error'))));

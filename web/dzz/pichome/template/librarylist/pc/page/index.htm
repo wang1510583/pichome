@@ -8,7 +8,7 @@
 {hook cloudupload}
 <script type="text/javascript" src="static/vue_components/screen/index.js?{VERHASH}"></script>
 <script type="text/javascript" src="static/vue_components/ImageFile/index.js?{VERHASH}"></script>
-<script type="text/javascript" src="static/vue_components/ImageLayout/index.js?{VERHASH}"></script>
+<script type="text/javascript" src="static/vue_components/ImageLayout/index.js?{VERHASH}&scrollfix=1&previewfix=4"></script>
 <script type="text/javascript" src="static/vue_components/collectdialog/index.js?{VERHASH}"></script>
 <link rel="stylesheet" type="text/css" href="dzz/pichome/template/librarylist/pc/assets/css/index.css?{VERHASH}"/>
 <link rel="stylesheet" type="text/css" href="dzz/pichome/template/librarylist/pc/assets/css/files.css?{VERHASH}"/>
@@ -1080,8 +1080,8 @@
 						});
 						if(res && (res.success || (res.data && res.data.success))){
 							self.$message({type:'success', message:'已将 '+rids.length+' 个素材移动'+(tfid==='root'?'到根目录':'')});
-							if(self.$refs.RefImageLayout){ self.$refs.RefImageLayout.restart(); }
-							self.CommonGetImageData();
+							// Refresh all loaded items without resetting the preview scroll position.
+							if(self.$refs.RefImageLayout){ self.$refs.RefImageLayout.restart(true); }
 							if(self.LeftTreeForceRefreshNum){ self.LeftTreeForceRefreshNum(); } else { self.LeftTreeGetFolderNum(); }
 							if(self.LeftGetAllNum){ self.LeftGetAllNum(); }
 						}else{

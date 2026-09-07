@@ -51,16 +51,7 @@ if($operation == 'deletefolder'){//删除目录
   if($tfid === '' || !$rids) exit(json_encode(array('success'=>false,'msg'=>'参数错误!')));
   $returndata['failedrids'] = $returndata['successrids'] = [];
   foreach($rids as $rid){
-      if($tfid === 'root'){//移动到根目录（未分类）
-          $rdata = C::t('pichome_resources')->fetch($rid);
-          if(!$rdata){ $returndata['failedrids'][] = $rid; continue; }
-          $oldfids = $rdata['fids'] ? explode(',', $rdata['fids']) : [];
-          if($oldfids){
-              C::t('pichome_folderresources')->delete_by_ridfid($rid, $oldfids);
-          }
-          C::t('pichome_resources')->update_by_rids($rdata['appid'], $rid, array('fids'=>'', 'lastdate'=>TIMESTAMP));
-          $returndata['successrids'][] = $rid;
-      }elseif(C::t('pichome_resources')->move_file_to_folder($rid,$tfid,$iscopy)) $returndata['successrids'][] = $rid;
+      if(C::t('pichome_resources')->move_file_to_folder($rid,$tfid,$tfid === 'root' ? 0 : $iscopy)) $returndata['successrids'][] = $rid;
       else  $returndata['failedrids'][] = $rid;
   }
     exit(json_encode(array('success'=>true,'data'=>$returndata)));

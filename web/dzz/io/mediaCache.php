@@ -97,6 +97,7 @@ function pichome_media_cache_etag($filename, $size, $mtime)
 
 function pichome_media_send_cache_headers($etag, $mtime, $maxAge = 2592000)
 {
+    header('Vary: Cookie', false);
     header('Cache-Control: private, max-age=' . intval($maxAge));
     header('Expires: ' . gmdate('D, d M Y H:i:s', time() + intval($maxAge)) . ' GMT');
     header('ETag: ' . $etag);

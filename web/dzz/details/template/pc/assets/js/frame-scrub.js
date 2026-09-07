@@ -47,7 +47,7 @@
 		var maximum = Math.max(0, parseInt(manifest && manifest.maxSegment, 10) || 0);
 		return Math.max(0, Math.min(
 			maximum,
-			Math.floor(Math.max(0, finiteNumber(time, 0)) / atlasSegmentSeconds(manifest))
+			Math.floor(Math.max(0, finiteNumber(time, 0)) / atlasSegmentSeconds(manifest) + 0.0000001)
 		));
 	}
 

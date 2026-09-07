@@ -8,7 +8,6 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -62,11 +61,6 @@ final class MediaDiskCache {
             Pattern.compile("(?:^|,)\\s*max-age\\s*=\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern CONTENT_RANGE_PATTERN =
             Pattern.compile("bytes\\s+(\\d+)-(\\d+)/(\\d+|\\*)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern PLAYER_MEDIA_URL_PATTERN = Pattern.compile(
-            "https?://pichome\\.lempet\\.top:5575/index\\.php\\?mod=io(?:&|&amp;)op=getStream[^\\\"'\\s<]*",
-            Pattern.CASE_INSENSITIVE
-    );
-
     private final File directory;
     private final String allowedHost;
     private final SharedPreferences preferences;
@@ -161,27 +155,13 @@ final class MediaDiskCache {
         }
 
         Uri uri = request.getUrl();
-        if (isPlayerPageUri(uri)) {
-            WebResourceResponse cachedPlayer = serveCachedPlayerPage(
-                    uri,
-                    fallbackUserAgent,
-                    request.getRequestHeaders()
-            );
-            if (cachedPlayer != null) return cachedPlayer;
-        }
         if (!isCacheableMediaUri(uri)) {
             return null;
         }
 
         String url = uri.toString();
         String cookie = CookieManager.getInstance().getCookie(url);
-        // Session cookies may be rotated even when the underlying media URL is unchanged.
-        // Prefer the server-provided resource id because encrypted media paths can change after
-        // a new login/app process even though the underlying Pichome resource is unchanged.
-        String stableIdentity = stableMediaIdentity(uri);
-        String key = stableIdentity.isEmpty()
-                ? sha256(url)
-                : cacheKey(url, stableIdentity);
+        String key = cacheKey(url, cookie);
         Entry entry = readEntry(key);
         if (entry != null) {
             if (entry.expiresAt >= System.currentTimeMillis() || validate(entry, url, cookie, fallbackUserAgent)) {
@@ -218,16 +198,13 @@ final class MediaDiskCache {
                 lastDiagnostic = "已发现素材，但地址不是可缓存媒体";
                 return;
             }
-            String key = cacheKey(uri.toString(), cacheIdentity);
+            String cookie = CookieManager.getInstance().getCookie(url);
+            String key = cacheKey(url, cookie);
             Entry existing = readEntry(key);
-            if (existing == null && migrateLegacyUrlEntry(uri.toString(), key)) {
-                existing = readEntry(key);
-            }
-            if (existing != null) {
+            if (existing != null && existing.expiresAt > System.currentTimeMillis()) {
                 lastDiagnostic = "素材已在本地缓存";
                 return;
             }
-            String cookie = CookieManager.getInstance().getCookie(uri.toString());
             lastDiagnostic = "素材已加入后台缓存队列";
             schedulePrefetch(key, uri.toString(), cookie, fallbackUserAgent);
         } catch (RuntimeException error) {
@@ -240,12 +217,9 @@ final class MediaDiskCache {
         try {
             Uri uri = Uri.parse(url);
             if (!isCacheableMediaUri(uri) || localServer == null || localServer.isClosed()) return "";
-            String key = cacheKey(uri.toString(), cacheIdentity);
+            String key = cacheKey(url, CookieManager.getInstance().getCookie(url));
             Entry entry = readEntry(key);
-            if (entry == null && migrateLegacyUrlEntry(uri.toString(), key)) {
-                entry = readEntry(key);
-            }
-            if (entry == null) return "";
+            if (entry == null || entry.expiresAt <= System.currentTimeMillis()) return "";
             if (localPlaybackKeys.add(key)) {
                 localPlaybackCount.incrementAndGet();
             }
@@ -288,13 +262,15 @@ final class MediaDiskCache {
     }
 
     void clearAll(Runnable completion) {
-        generation.incrementAndGet();
         Thread clearThread = new Thread(() -> {
             try {
-                File[] files = directory.listFiles();
-                if (files != null) {
-                    for (File file : files) {
-                        file.delete();
+                synchronized (MediaDiskCache.this) {
+                    generation.incrementAndGet();
+                    File[] files = directory.listFiles();
+                    if (files != null) {
+                        for (File file : files) {
+                            file.delete();
+                        }
                     }
                 }
             } catch (Throwable ignored) {
@@ -329,7 +305,10 @@ final class MediaDiskCache {
         if (uri == null
                 || !"https".equalsIgnoreCase(uri.getScheme())
                 || uri.getHost() == null
-                || !allowedHost.equalsIgnoreCase(uri.getHost())) {
+                || !allowedHost.equalsIgnoreCase(uri.getHost())
+                || uri.getPort() != 5575
+                || !"/index.php".equals(uri.getPath())
+                || uri.getUserInfo() != null) {
             return false;
         }
         String query = uri.getEncodedQuery();
@@ -344,115 +323,10 @@ final class MediaDiskCache {
         return regularMedia || frameAtlas;
     }
 
-    private boolean isPlayerPageUri(Uri uri) {
-        if (uri == null
-                || !"https".equalsIgnoreCase(uri.getScheme())
-                || uri.getHost() == null
-                || !allowedHost.equalsIgnoreCase(uri.getHost())) {
-            return false;
-        }
-        try {
-            return "xgplayer".equalsIgnoreCase(uri.getQueryParameter("mod"))
-                    && uri.getQueryParameter("path") != null
-                    && !uri.getQueryParameter("path").isEmpty();
-        } catch (UnsupportedOperationException ignored) {
-            return false;
-        }
-    }
-
-    private WebResourceResponse serveCachedPlayerPage(
-            Uri playerUri,
-            String fallbackUserAgent,
-            Map<String, String> requestHeaders
-    ) {
-        String path = playerUri.getQueryParameter("path");
-        String rid = playerUri.getQueryParameter("pichome_rid");
-        String stableRid = rid == null ? "" : rid.trim();
-        String identity = !stableRid.isEmpty() && stableRid.length() <= 256
-                ? "rid:" + stableRid + ":video"
-                : "xgplayer:" + path;
-        String key = cacheKey(playerUri.toString(), identity);
-        Entry entry = readEntry(key);
-        if (entry == null || localServer == null || localServer.isClosed()) return null;
-        String localUrl = "http://127.0.0.1:" + localServer.getLocalPort()
-                + "/" + localToken + "/" + key;
-        HttpURLConnection connection = null;
-        try {
-            String url = playerUri.toString();
-            String cookie = CookieManager.getInstance().getCookie(url);
-            connection = openConnection(url, cookie, fallbackUserAgent, requestHeaders, false);
-            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            try (InputStream input = connection.getInputStream()) {
-                byte[] block = new byte[16 * 1024];
-                int count;
-                while ((count = input.read(block)) != -1) {
-                    if (buffer.size() + count > 4 * 1024 * 1024) return null;
-                    buffer.write(block, 0, count);
-                }
-            }
-            String html = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
-            Matcher matcher = PLAYER_MEDIA_URL_PATTERN.matcher(html);
-            if (!matcher.find()) {
-                lastDiagnostic = "已命中视频缓存，但播放器地址替换失败";
-                return null;
-            }
-            html = matcher.replaceAll(Matcher.quoteReplacement(localUrl));
-            Map<String, String> headers = new HashMap<>();
-            headers.put("Cache-Control", "no-store");
-            headers.put("Access-Control-Allow-Origin", "*");
-            if (localPlaybackKeys.add(key)) {
-                localPlaybackCount.incrementAndGet();
-            }
-            lastDiagnostic = "已从本地缓存初始化视频播放器";
-            return new WebResourceResponse(
-                    "text/html",
-                    "UTF-8",
-                    200,
-                    "OK",
-                    headers,
-                    new ByteArrayInputStream(html.getBytes(StandardCharsets.UTF_8))
-            );
-        } catch (IOException | RuntimeException error) {
-            lastDiagnostic = "本地播放器初始化失败：" + error.getClass().getSimpleName();
-            return null;
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
-    }
-
     private boolean isStreamUri(Uri uri) {
         String query = uri == null ? null : uri.getEncodedQuery();
         return query != null
                 && hasQueryValue(query.toLowerCase(Locale.US), "op", "getstream");
-    }
-
-    private String stableMediaIdentity(Uri uri) {
-        if (uri == null) return "";
-        try {
-            if ("details".equalsIgnoreCase(uri.getQueryParameter("mod"))
-                    && "fileinterface".equalsIgnoreCase(uri.getQueryParameter("op"))
-                    && "frameAtlas".equalsIgnoreCase(uri.getQueryParameter("operation"))) {
-                String atlasRid = valueOrEmpty(uri.getQueryParameter("pichome_atlas_rid")).trim();
-                String revision = valueOrEmpty(uri.getQueryParameter("revision")).trim();
-                String second = valueOrEmpty(uri.getQueryParameter("second")).trim();
-                String version = valueOrEmpty(uri.getQueryParameter("pichome_atlas_version")).trim();
-                if (!atlasRid.isEmpty() && atlasRid.length() <= 256
-                        && revision.matches("[0-9a-f]{24}")
-                        && second.matches("\\d{1,9}")
-                        && version.matches("\\d{1,3}")) {
-                    return "atlas:" + atlasRid + ":" + revision + ":" + second + ":v" + version;
-                }
-                return "";
-            }
-            String rid = uri.getQueryParameter("pichome_rid");
-            if (rid == null) return "";
-            rid = rid.trim();
-            if (rid.isEmpty() || rid.length() > 256) return "";
-            return "rid:" + rid + ":" + (isStreamUri(uri) ? "video" : "img");
-        } catch (UnsupportedOperationException ignored) {
-            return "";
-        }
     }
 
     private boolean hasQueryValue(String query, String name, String value) {
@@ -463,26 +337,34 @@ final class MediaDiskCache {
                 || query.contains("&" + pair + "&");
     }
 
-    private String cacheKey(String url, String cacheIdentity) {
-        String identity = cacheIdentity == null ? "" : cacheIdentity.trim();
-        if (identity.length() > 2048) identity = "";
-        return sha256(identity.isEmpty() ? "url:" + url : "media:" + identity);
+    private String sessionScope(String cookie) {
+        List<String> credentials = new ArrayList<>();
+        if (cookie != null) {
+            for (String part : cookie.split(";")) {
+                String value = part.trim();
+                int separator = value.indexOf('=');
+                if (separator < 0) continue;
+                String name = value.substring(0, separator);
+                if (name.equals("auth") || name.endsWith("_auth")) credentials.add(value);
+            }
+        }
+        Collections.sort(credentials);
+        return sha256(String.join(";", credentials));
     }
 
-    private synchronized boolean migrateLegacyUrlEntry(String url, String targetKey) {
-        String legacyKey = sha256(url);
-        if (legacyKey.equals(targetKey) || readEntry(legacyKey) == null) return false;
-        File sourceBody = bodyFile(legacyKey);
-        File sourceMetadata = metadataFile(legacyKey);
-        File targetBody = bodyFile(targetKey);
-        File targetMetadata = metadataFile(targetKey);
-        if (targetBody.exists() || targetMetadata.exists()) return false;
-        if (!sourceBody.renameTo(targetBody)) return false;
-        if (!sourceMetadata.renameTo(targetMetadata)) {
-            targetBody.renameTo(sourceBody);
-            return false;
+    private String cacheKey(String url, String cookie) {
+        Uri uri = Uri.parse(url);
+        Uri.Builder canonical = uri.buildUpon().clearQuery().fragment(null);
+        List<String> names = new ArrayList<>(uri.getQueryParameterNames());
+        Collections.sort(names);
+        for (String name : names) {
+            for (String value : uri.getQueryParameters(name)) canonical.appendQueryParameter(name, value);
         }
-        return true;
+        return sha256("v2:" + sessionScope(cookie) + ":" + canonical.build());
+    }
+
+    private boolean isCurrentSession(Entry entry) {
+        return entry.sessionScope.equals(sessionScope(CookieManager.getInstance().getCookie(entry.url)));
     }
 
     private WebResourceResponse fetchFromNetwork(
@@ -493,6 +375,7 @@ final class MediaDiskCache {
             Map<String, String> requestHeaders,
             boolean prefetchPartial
     ) {
+        long requestGeneration = generation.get();
         HttpURLConnection connection = null;
         try {
             connection = openConnection(url, cookie, fallbackUserAgent, requestHeaders, false);
@@ -504,6 +387,7 @@ final class MediaDiskCache {
 
             rememberResponseCookies(url, connection);
             Map<String, String> responseHeaders = flattenHeaders(connection);
+            responseHeaders.put("Cache-Control", "no-store");
             String contentType = connection.getContentType();
             String mimeType = parseMimeType(contentType);
             String encoding = parseCharset(contentType);
@@ -524,7 +408,7 @@ final class MediaDiskCache {
             InputStream responseBody;
             if (cacheable) {
                 File temporary = File.createTempFile(key + "-", ".part", directory);
-                Entry pending = entryFromResponse(key, mimeType, encoding, connection, contentLength);
+                Entry pending = entryFromResponse(key, mimeType, encoding, connection, contentLength, url, cookie, requestGeneration);
                 responseBody = new CachingInputStream(
                         source,
                         connection,
@@ -631,10 +515,9 @@ final class MediaDiskCache {
                 touch(entry);
                 return true;
             }
-            return statusCode >= 500;
+            return false;
         } catch (IOException | RuntimeException ignored) {
-            // Stale-if-error: a previously verified private cache is better than a blank preview.
-            return true;
+            return false;
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -697,10 +580,7 @@ final class MediaDiskCache {
     private Map<String, String> baseCacheHeaders(Entry entry) {
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept-Ranges", "bytes");
-        headers.put("Cache-Control", "private, max-age=" + Math.max(
-                0,
-                (entry.expiresAt - System.currentTimeMillis()) / 1000L
-        ));
+        headers.put("Cache-Control", "no-store");
         headers.put("Access-Control-Allow-Origin", "*");
         if (entry.etag != null && !entry.etag.isEmpty()) {
             headers.put("ETag", entry.etag);
@@ -768,7 +648,7 @@ final class MediaDiskCache {
                 return;
             }
             Entry entry = readEntry(pathParts[2]);
-            if (entry == null) {
+            if (entry == null || !isCurrentSession(entry) || entry.expiresAt <= System.currentTimeMillis()) {
                 writeLocalError(output, 404, "Not Found");
                 return;
             }
@@ -829,12 +709,17 @@ final class MediaDiskCache {
         if (!inFlight.add(key)) {
             return;
         }
+        long requestGeneration = generation.get();
         worker.execute(() -> {
             HttpURLConnection connection = null;
             File temporary = null;
             boolean completed = false;
             try {
-                if (readEntry(key) != null) {
+                if (requestGeneration != generation.get()
+                        || !sessionScope(cookie).equals(sessionScope(CookieManager.getInstance().getCookie(url)))) return;
+                Entry existing = readEntry(key);
+                if (existing != null && (existing.expiresAt > System.currentTimeMillis()
+                        || validate(existing, url, cookie, userAgent))) {
                     lastDiagnostic = "素材已在本地缓存";
                     completed = true;
                     return;
@@ -861,7 +746,10 @@ final class MediaDiskCache {
                         parseMimeType(contentType),
                         parseCharset(contentType),
                         connection,
-                        length
+                        length,
+                        url,
+                        cookie,
+                        requestGeneration
                 );
                 temporary = File.createTempFile(key + "-", ".part", directory);
                 try (InputStream input = connection.getInputStream();
@@ -870,6 +758,7 @@ final class MediaDiskCache {
                     long copied = 0;
                     int count;
                     while (!Thread.currentThread().isInterrupted()
+                            && requestGeneration == generation.get()
                             && (count = input.read(buffer)) != -1) {
                         output.write(buffer, 0, count);
                         copied += count;
@@ -910,7 +799,10 @@ final class MediaDiskCache {
             String mimeType,
             String encoding,
             HttpURLConnection connection,
-            long length
+            long length,
+            String url,
+            String cookie,
+            long requestGeneration
     ) {
         Entry entry = new Entry();
         entry.key = key;
@@ -921,7 +813,9 @@ final class MediaDiskCache {
         entry.lastModified = valueOrEmpty(connection.getHeaderField("Last-Modified"));
         entry.expiresAt = calculateExpiresAt(connection);
         entry.length = length;
-        entry.generation = generation.get();
+        entry.generation = requestGeneration;
+        entry.url = url;
+        entry.sessionScope = sessionScope(cookie);
         return entry;
     }
 
@@ -929,6 +823,7 @@ final class MediaDiskCache {
         if (temporary == null
                 || temporary.length() != expectedLength
                 || entry.generation != generation.get()
+                || !isCurrentSession(entry)
                 || expectedLength > maxCacheBytes
                 || directory.getUsableSpace() < MIN_FREE_SPACE_BYTES) {
             if (temporary != null) temporary.delete();
@@ -951,7 +846,7 @@ final class MediaDiskCache {
         cleanup(0);
     }
 
-    private Entry readEntry(String key) {
+    private synchronized Entry readEntry(String key) {
         File body = bodyFile(key);
         File metadata = metadataFile(key);
         if (!body.isFile() || !metadata.isFile()) {
@@ -963,6 +858,12 @@ final class MediaDiskCache {
             Entry entry = new Entry();
             entry.key = key;
             entry.body = body;
+            entry.url = properties.getProperty("url", "");
+            entry.sessionScope = properties.getProperty("sessionScope", "");
+            if (!isCacheableMediaUri(Uri.parse(entry.url)) || entry.sessionScope.isEmpty()) {
+                deleteEntry(key);
+                return null;
+            }
             entry.length = Long.parseLong(properties.getProperty("length", "-1"));
             entry.expiresAt = Long.parseLong(properties.getProperty("expiresAt", "0"));
             entry.mimeType = properties.getProperty("mimeType", "application/octet-stream");
@@ -980,8 +881,10 @@ final class MediaDiskCache {
         }
     }
 
-    private void writeEntryMetadata(Entry entry) {
+    private synchronized void writeEntryMetadata(Entry entry) {
         Properties properties = new Properties();
+        properties.setProperty("url", entry.url);
+        properties.setProperty("sessionScope", entry.sessionScope);
         properties.setProperty("length", Long.toString(entry.length));
         properties.setProperty("expiresAt", Long.toString(entry.expiresAt));
         properties.setProperty("mimeType", valueOrEmpty(entry.mimeType));
@@ -1010,6 +913,8 @@ final class MediaDiskCache {
         long now = System.currentTimeMillis();
         for (File file : files) {
             if (file.getName().endsWith(".body")) {
+                String key = file.getName().substring(0, file.getName().length() - 5);
+                if (readEntry(key) == null) continue;
                 bodies.add(file);
                 total += file.length();
             } else if ((file.getName().endsWith(".part") || file.getName().endsWith(".tmp"))
@@ -1071,6 +976,7 @@ final class MediaDiskCache {
     private long calculateExpiresAt(HttpURLConnection connection) {
         String cacheControl = connection.getHeaderField("Cache-Control");
         if (cacheControl != null) {
+            if (cacheControl.toLowerCase(Locale.US).contains("no-cache")) return System.currentTimeMillis();
             Matcher matcher = MAX_AGE_PATTERN.matcher(cacheControl);
             if (matcher.find()) {
                 try {
@@ -1239,6 +1145,8 @@ final class MediaDiskCache {
 
     private static final class Entry {
         String key;
+        String url;
+        String sessionScope;
         File body;
         long length;
         long expiresAt;

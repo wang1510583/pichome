@@ -125,12 +125,13 @@ function pichome_frame_atlas_profile_config($profile) {
                 'segmentSeconds' => 1,
                 'maxDecodedBytes' => 64 * 1024 * 1024
             );
+        case 'mobile-aligned':
         case 'mobile-ultra':
             return array(
-                'name' => 'mobile-ultra',
-                'version' => 4,
-                'cacheVersion' => 'frame-atlas-v4-mobile-ultra',
-                'revisionSeed' => 'frame-atlas-v4-mobile-ultra-640-480-q90-grid4096-mem36',
+                'name' => (string)$profile,
+                'version' => $profile === 'mobile-aligned' ? 5 : 4,
+                'cacheVersion' => $profile === 'mobile-aligned' ? 'frame-atlas-v5-mobile-aligned' : 'frame-atlas-v4-mobile-ultra',
+                'revisionSeed' => 'frame-atlas-' . $profile . '-640-480-q90-grid4096-mem36',
                 'longEdgeLowFps' => 640,
                 'longEdgeHighFps' => 480,
                 'quality' => 90,
@@ -229,7 +230,7 @@ function pichome_frame_atlas_probe($rid, $resourcesdata, $source, $profile = 'de
     $profileConfig = pichome_frame_atlas_profile_config($profile);
     $profile = $profileConfig['name'];
     $revision = substr(hash('sha256', implode('|', array(
-        $profileConfig['revisionSeed'],
+        $profileConfig['revisionSeed'] . '-aligned-grid-v2',
         (string)$rid,
         (string)$source['relativePath'],
         (string)$size,
@@ -289,6 +290,9 @@ function pichome_frame_atlas_probe($rid, $resourcesdata, $source, $profile = 'de
     $fps = round($fps, 6);
     $segmentSeconds = max(0.05, floatval($profileConfig['segmentSeconds']));
     $framesPerSegment = max(1, intval(ceil($fps * $segmentSeconds)));
+    if (strpos($profile, 'desktop-') === 0 || $profile === 'mobile-aligned') {
+        $segmentSeconds = $framesPerSegment / $fps;
+    }
     $desiredLongEdge = $fps > 30.5
         ? $profileConfig['longEdgeHighFps']
         : $profileConfig['longEdgeLowFps'];
@@ -362,7 +366,7 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'd
     if (!is_file($atlasFile) || filesize($atlasFile) < 32) {
         $lockFile = $atlasFile.'.lock';
         $lock = @fopen($lockFile, 'c');
-        if (!$lock || !@flock($lock, LOCK_EX)) {
+        if (!$lock || !@flock($lock, LOCK_EX | LOCK_NB)) {
             if ($lock) @fclose($lock);
             pichome_frame_atlas_error('atlas_busy', '帧图集暂时不可用', 503);
         }
@@ -375,6 +379,21 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'd
                 pichome_frame_atlas_error('ffmpeg_unavailable', '服务器未安装可用的 FFmpeg', 503);
             }
             $temporary = $atlasFile.'.'.strtolower(random(8)).'.tmp.webp';
+            $generationLock = false;
+            for ($slot = 0; $slot < 2; $slot++) {
+                $slotFile = rtrim(getglobal('setting/attachdir'), '/\\') . BS . 'cache' . BS . 'frame-atlas-worker-' . $slot . '.lock';
+                $candidateLock = @fopen($slotFile, 'c');
+                if ($candidateLock && @flock($candidateLock, LOCK_EX | LOCK_NB)) {
+                    $generationLock = $candidateLock;
+                    break;
+                }
+                if ($candidateLock) @fclose($candidateLock);
+            }
+            if (!$generationLock) {
+                @flock($lock, LOCK_UN);
+                @fclose($lock);
+                pichome_frame_atlas_error('atlas_busy', '服务器正在生成其他帧图集，请稍后重试', 503);
+            }
             $filter = 'fps='.number_format($metadata['fps'], 6, '.', '')
                 .',scale='.$metadata['cellWidth'].':'.$metadata['cellHeight'].':flags=lanczos'
                 .',tile='.$metadata['columns'].'x'.$rows.':nb_frames='.$frameCount.':margin=0:padding=0';
@@ -382,16 +401,18 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'd
                     ? escapeshellarg('/usr/bin/timeout').' -k 3s 45s '
                     : '')
                 .escapeshellarg($ffmpeg)
-                .' -hide_banner -loglevel error -y'
+                .' -hide_banner -loglevel error -y -filter_threads 1 -threads 2'
                 .' -ss '.escapeshellarg(number_format($segmentStart, 6, '.', ''))
                 .' -i '.escapeshellarg($source['file'])
                 .' -t '.escapeshellarg(number_format($segmentDuration, 6, '.', ''))
                 .' -an -sn -vf '.escapeshellarg($filter)
-                .' -frames:v 1 -c:v libwebp -quality '
+                .' -frames:v 1 -c:v libwebp -threads 2 -quality '
                 .$profileConfig['quality'].' '.escapeshellarg($temporary);
             $output = array();
             $status = 1;
             @exec($command.' 2>&1', $output, $status);
+            @flock($generationLock, LOCK_UN);
+            @fclose($generationLock);
             if ($status !== 0 || !is_file($temporary) || filesize($temporary) < 32) {
                 @unlink($temporary);
                 @flock($lock, LOCK_UN);
@@ -409,7 +430,6 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'd
         }
         @flock($lock, LOCK_UN);
         @fclose($lock);
-        @unlink($lockFile);
     }
 
     $etag = '"frame-atlas-'.$metadata['revision'].'-'.$second.'"';
@@ -417,6 +437,7 @@ function pichome_frame_atlas_serve_image($rid, $source, $metadata, $profile = 'd
         header('Content-Type: image/webp');
         header('Content-Length: '.filesize($atlasFile));
         header('Cache-Control: private, max-age=31536000, immutable');
+        header('Vary: Cookie', false);
         header('ETag: '.$etag);
         header('X-Pichome-Atlas-Frames: '.$frameCount);
         header('X-Pichome-Atlas-Rows: '.$rows);
