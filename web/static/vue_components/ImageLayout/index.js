@@ -11,6 +11,66 @@
         let hoverTimer=null, stallTimer=null, touchUntil=0;
         let lastPlaybackTime=0;
         let cacheTimer=null, attemptedLocal="";
+        let pausedByUser=false, gestureHost=null, suppressTapUntil=0;
+        let touchSoundConfigured=false;
+        let previewFps=0, frameRequest=null;
+        let frameEngine=null;
+        function pixelsPerFrame(){try{return window.localStorage.getItem('pichomeFrameScrubPixels')==='14'?14:7;}catch(ignore){return 7;}}
+        function installFrameEngine(){
+            if(frameEngine||!window.PichomeFrameScrub||!props.ImageData.dpath)return;
+            frameEngine=window.PichomeFrameScrub.installVideo(video,{rid:props.ImageData.rid,path:props.ImageData.dpath,profile:'mobile-aligned',pixelsPerFrame:pixelsPerFrame(),allowMouse:false,allowTouch:false,preload:true,trackPlayback:true});
+        }
+        function loadFrameRate(){
+            if(previewFps||frameRequest||!props.ImageData.dpath||!window.fetch)return;
+            const url=new URL('index.php?mod=details&op=fileinterface&operation=frameAtlasManifest&profile=mobile-aligned',document.baseURI);
+            url.searchParams.set('path',props.ImageData.dpath);
+            frameRequest=new window.AbortController();
+            window.fetch(url.href,{credentials:'same-origin',signal:frameRequest.signal}).then(response=>response.ok?response.json():null).then(data=>{
+                if(!disposed&&data&&data.success&&Number(data.fps)>0)previewFps=Number(data.fps);
+            }).catch(()=>{});
+        }
+        function pausePreview(){
+            pausedByUser=true;
+            generation++;
+            playPending=false;
+            clearStall();
+            clearCacheWatch();
+            state.loading=false;
+            video.pause();
+        }
+        function frameRate(){
+            const value=String(previewFps||props.ImageData.fps||props.ImageData.frame_rate||props.ImageData.framerate||30).split('/');
+            const rate=Number(value[0])/(value.length>1?Number(value[1]):1);
+            return Number.isFinite(rate)&&rate>0?rate:30;
+        }
+        function pointerMove(event){
+            if(!touchStart||!touchStart.preview||event.pointerId!==touchStart.id)return;
+            event.preventDefault();
+            event.stopPropagation();
+            const distance=event.clientX-touchStart.x;
+            if(Math.hypot(distance,event.clientY-touchStart.y)>=7)touchStart.moved=true;
+            if(Math.abs(distance)<7&&!touchStart.scrubbing)return;
+            if(!touchStart.scrubbing){pausePreview();touchStart.scrubbing=true;if(frameEngine)frameEngine.beginScrub();}
+            if(frameEngine&&frameEngine.atlas.status!=='failed'){
+                frameEngine.scrubDistance(distance);
+                return;
+            }
+            const frames=distance<0?Math.ceil(distance/touchStart.step):Math.floor(distance/touchStart.step);
+            const target=Math.max(0,Math.min(Math.max(0,video.duration-0.001),touchStart.time+frames/touchStart.fps));
+            if(Number.isFinite(target)&&Math.abs(video.currentTime-target)>0.00001)video.currentTime=target;
+        }
+        function blockTouch(event){if(active){event.stopPropagation();if(event.type==='touchmove'&&event.cancelable)event.preventDefault();}}
+        function blockClick(event){if(Date.now()<suppressTapUntil&&gestureHost.contains(event.target)&&!event.target.closest?.('.voice')){event.preventDefault();event.stopImmediatePropagation();}}
+        function bindGestures(){
+            if(gestureHost||!box.value||!box.value.addEventListener)return;
+            gestureHost=box.value;
+            gestureHost.addEventListener('pointermove',pointerMove,{passive:false});
+            gestureHost.addEventListener('touchmove',blockTouch,{passive:false});
+            gestureHost.addEventListener('touchstart',blockTouch,{passive:true});
+            gestureHost.addEventListener('touchend',blockTouch,{passive:true});
+            gestureHost.ownerDocument.addEventListener('click',blockClick,true);
+            gestureHost.ownerDocument.addEventListener('dblclick',blockClick,true);
+        }
         video.className="video";
         video.muted=true;
         video.defaultMuted=true;
@@ -22,7 +82,7 @@
         function clearStall(){clearTimeout(stallTimer);stallTimer=null;}
         function clearCacheWatch(){clearTimeout(cacheTimer);cacheTimer=null;}
         function useCompletedCache(){
-            if(!active||disposed||!window.PichomeCache)return false;
+            if(!active||disposed||pausedByUser||!window.PichomeCache)return false;
             let cached="";
             try{cached=window.PichomeCache.getCachedMediaUrl(remote,"rid:"+props.ImageData.rid+":video")||"";}catch(ignore){}
             if(!cached||cached===remote||cached===attemptedLocal)return false;
@@ -55,7 +115,7 @@
             video.load();
         }
         function recover(){
-            if(!active||disposed)return;
+            if(!active||disposed||pausedByUser)return;
             if(useCompletedCache())return;
             if(retried){fail();return;}
             retried=true;
@@ -75,7 +135,7 @@
         }
 
         function play(){
-            if(!active||disposed||playPending||state.error)return;
+            if(!active||disposed||pausedByUser||playPending||state.error)return;
             const attempt=generation;
             playPending=true;
             try{
@@ -83,7 +143,7 @@
                 if(promise&&promise.then)promise.then(()=>{
                     if(attempt!==generation)return;
                     playPending=false;
-                    if(!active)video.pause();
+                    if(!active||pausedByUser)video.pause();
                 }).catch(error=>{
                     if(attempt!==generation)return;
                     playPending=false;
@@ -119,12 +179,18 @@
             const wasActive=active;
             clearTimeout(hoverTimer);hoverTimer=null;
             active=true;
+            pausedByUser=false;
+            bindGestures();
+            if(box.value&&box.value.style)box.value.style.touchAction='none';
             state.show=true;
             state.error="";
             if(!wasActive)window.dispatchEvent(new CustomEvent("pichome-list-preview",{detail:video}));
             remote=props.ImageData.mediaplayerpath;
             video.dataset.pichomeOriginalMediaUrl=remote;
             if(!video.parentNode)videoBox.value.appendChild(video);
+            if(videoBox.value.style)videoBox.value.style.position='relative';
+            installFrameEngine();
+            if(!frameEngine)loadFrameRate();
             // A previous stream may still be pending while the native cache has
             // finished. Re-resolve on every activation, not just component creation.
             let url=remote;
@@ -149,10 +215,13 @@
             }
         }
         function stop(){
+            if(frameEngine){frameEngine.destroy();frameEngine=null;}
             clearTimeout(hoverTimer);hoverTimer=null;
             clearStall();
             clearCacheWatch();
             active=false;
+            touchStart=null;
+            if(box.value&&box.value.style)box.value.style.touchAction='';
             generation++;
             playPending=false;
             video.pause();
@@ -160,6 +229,10 @@
             state.loading=false;
         }
         function otherPreview(event){if(event.detail!==video)stop();}
+        function detailOpened(){
+            clearTimeout(hoverTimer);hoverTimer=null;
+            if(active)pausePreview();
+        }
         function formatTime(time,duration){
             if(!Number.isFinite(time))return "00";
             const seconds=Math.floor(time),pad=value=>String(value).padStart(2,"0");
@@ -168,8 +241,8 @@
         }
         video.addEventListener("loadstart",()=>{generation++;playPending=false;if(active&&!state.error)monitor();});
         video.addEventListener("canplay",()=>{state.finish=true;state.loading=false;if(active)play();});
-        video.addEventListener("playing",()=>{if(!active||disposed){video.pause();return;}monitor();state.error="";state.loading=false;state.finish=true;});
-        video.addEventListener("waiting",()=>{if(active&&!state.error){state.loading=true;monitor();watchCache();}});
+        video.addEventListener("playing",()=>{if(!active||disposed||pausedByUser){video.pause();return;}monitor();state.error="";state.loading=false;state.finish=true;});
+        video.addEventListener("waiting",()=>{if(active&&!pausedByUser&&!state.error){state.loading=true;monitor();watchCache();}});
         video.addEventListener("timeupdate",()=>{
             const duration=video.duration;
             // Metadata/timeupdate events can fire at the same timestamp while a
@@ -185,10 +258,21 @@
             if(active)recover();
         });
         window.addEventListener("pichome-list-preview",otherPreview);
+        window.addEventListener("pichome-detail-open",detailOpened);
         Vue.onBeforeUnmount(()=>{
             disposed=true;
             stop();
+            if(gestureHost){
+                gestureHost.removeEventListener('pointermove',pointerMove);
+                gestureHost.removeEventListener('touchmove',blockTouch);
+                gestureHost.removeEventListener('touchstart',blockTouch);
+                gestureHost.removeEventListener('touchend',blockTouch);
+                gestureHost.ownerDocument.removeEventListener('click',blockClick,true);
+                gestureHost.ownerDocument.removeEventListener('dblclick',blockClick,true);
+            }
+            if(frameRequest)frameRequest.abort();
             window.removeEventListener("pichome-list-preview",otherPreview);
+            window.removeEventListener("pichome-detail-open",detailOpened);
             video.removeAttribute("src");
             video.load();
             video.remove();
@@ -197,12 +281,38 @@
             DomBox:box,DomVideoBox:videoBox,VideoData:state,Mouseenter:hover,
             Mouseleave(event){if(!isTouch(event))stop();},
             Retry:start,
-            Pointerdown(event){if(event.pointerType==="touch"){touchUntil=Date.now()+1500;clearTimeout(hoverTimer);hoverTimer=null;touchStart={x:event.clientX,y:event.clientY};}},
+            Pointerdown(event){
+                if(event.pointerType!=="touch")return;
+                if(event.target&&event.target.closest&&event.target.closest('.voice'))return;
+                if(event.isPrimary===false){if(touchStart)touchStart.moved=true;return;}
+                touchUntil=Date.now()+1500;clearTimeout(hoverTimer);hoverTimer=null;
+                touchStart={x:event.clientX,y:event.clientY,id:event.pointerId,time:video.currentTime,fps:frameRate(),step:pixelsPerFrame(),preview:active&&state.finish,moved:false,scrubbing:false};
+                if(frameEngine)frameEngine.pixelsPerFrame=touchStart.step;
+                if(active){event.preventDefault?.();event.stopPropagation?.();try{box.value.setPointerCapture(event.pointerId);}catch(ignore){}}
+            },
+            Pointermove:pointerMove,
             Pointerup(event){
-                if(event.pointerType==="touch"&&touchStart&&Math.hypot(event.clientX-touchStart.x,event.clientY-touchStart.y)<10)start();
+                if(event.pointerType==="touch"&&touchStart&&event.pointerId===touchStart.id){
+                    if(touchStart.scrubbing&&frameEngine)frameEngine.endScrub();
+                    suppressTapUntil=Date.now()+500;
+                    if(!touchStart.moved&&Math.hypot(event.clientX-touchStart.x,event.clientY-touchStart.y)<7){
+                        if(!touchSoundConfigured){
+                            touchSoundConfigured=true;
+                            video.removeAttribute('muted');
+                            video.defaultMuted=false;
+                            video.muted=false;
+                            video.volume=1;
+                            state.muted=true;
+                        }
+                        video.loop=true;
+                        if(active&&state.finish&&!state.error){if(pausedByUser||video.paused){pausedByUser=false;play();}else pausePreview();}
+                        else start();
+                    }
+                    if(touchStart.preview){event.preventDefault?.();event.stopPropagation?.();}
+                }
                 touchStart=null;
             },
-            Pointercancel(){touchStart=null;},
+            Pointercancel(){if(frameEngine)frameEngine.endScrub();touchStart=null;},
             Mousemove(event){
                 if(isTouch(event))return;
                 if(!active||!state.finish||!Number.isFinite(video.duration)||video.duration<=0)return;
@@ -216,7 +326,7 @@
                 try{video.currentTime=target;}catch(ignore){}
                 if(video.paused)play();
             },
-            handlesound(){video.muted=!video.muted;state.muted=!video.muted;if(active)play();}
+            handlesound(){touchSoundConfigured=true;video.muted=!video.muted;state.muted=!video.muted;if(active)play();}
         };
     }
 };

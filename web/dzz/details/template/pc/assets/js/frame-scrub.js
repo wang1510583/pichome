@@ -851,6 +851,17 @@
 		};
 
 		root.__pichomeDesktopFrameScrubState = state;
+		state.beginScrub = function () {
+			if (state.destroyed || state.gesture) return;
+			state.gesture = {pointerId: -1, active: false, originTime: NaN, originFrame: NaN, desiredDelta: 0, appliedDelta: 0, raf: 0};
+			activateGesture(state, state.gesture, null);
+		};
+		state.scrubDistance = function (distance) {
+			if (state.destroyed || !state.gesture) return;
+			state.gesture.desiredDelta = frameDeltaForDistance(distance, state.pixelsPerFrame);
+			scheduleGesturePump(state);
+		};
+		state.endScrub = function () { finishGesture(state, null); };
 		video.__pichomeDesktopFrameScrub = state;
 		ensureManifest(state);
 		return state;

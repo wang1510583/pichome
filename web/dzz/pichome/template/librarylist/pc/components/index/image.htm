@@ -23,7 +23,7 @@
 		<template v-if="data.share || data.download || data.down || LeftCurrenType != 'recycle'">
 			<template v-if="ImageProps.layout=='rowGrid' || ImageProps.layout=='imageList' || ImageProps.layout=='waterFall'">
 				<div class="operation-box" @click.stop  :style="{opacity:data.isdropdown?1:''}">
-					<el-dropdown @command="ImageOperationf" @visible-change="data.isdropdown = !data.isdropdown">
+					<el-dropdown :trigger="ispc ? 'hover' : 'click'" @command="ImageOperationf" @visible-change="data.isdropdown = !data.isdropdown">
 						<span class="operation-btn">
 							<el-icon><More-Filled /></el-icon>
 						</span>
@@ -82,7 +82,7 @@
 				</div>
 			</template>
 			<template v-else>
-				<el-dropdown @command="ImageOperationf">
+				<el-dropdown :trigger="ispc ? 'hover' : 'click'" @command="ImageOperationf">
 					<el-button :plain="active" style="margin-left: 12px;" icon="MoreFilled"></el-button>
 					<template #dropdown>
 						<el-dropdown-menu>
@@ -524,6 +524,7 @@
 				self.$refs.RefImageLayout.HandleElScrollbar();
 			},
 			ImageDetails(item){//双击事件
+				window.dispatchEvent(new CustomEvent('pichome-detail-open'));
 				var arr = [];
 				for(var i in this.ImageDataParam.data){
 					arr.push(this.ImageDataParam.data[i].dpath)
@@ -971,109 +972,16 @@
 			},
 		},
 		mounted(){
-			var self = this;
-			// 安卓端与移动端触屏长按素材卡片弹出右键菜单 (2026-08-19)
-			let touchTimer = null;
-			let touchStartPos = { x: 0, y: 0 };
-			let longPressed = false;
-			let currentMatch = null;
-
-			const clearLongPressTimer = () => {
-				if (touchTimer) {
-					clearTimeout(touchTimer);
-					touchTimer = null;
-				}
+			this.mobileMaterialContextMenu = (event) => {
+				if (this.ispc && event.pointerType !== 'touch') return;
+				if (!event.target.closest || !event.target.closest('.image-item[data-rid], .imagtable-content[data-rid]')) return;
+				event.preventDefault();
+				event.stopImmediatePropagation();
 			};
-
-			const findCardAndData = (el) => {
-				if (!el || !el.closest) return null;
-				const card = el.closest('[data-rid]');
-				if (!card) return null;
-				const rid = card.getAttribute('data-rid');
-				if (!rid) return null;
-				const list = (self.ImageDataParam && self.ImageDataParam.data) || (self.$refs.RefImageLayout && self.$refs.RefImageLayout.NewImageData) || [];
-				const item = list.find(it => it && String(it.rid) === String(rid));
-				return item ? { card, rid, item } : null;
-			};
-
-			document.addEventListener('touchstart', (e) => {
-				if (e.touches.length !== 1) {
-					clearLongPressTimer();
-					return;
-				}
-				const touch = e.touches[0];
-				touchStartPos = { x: touch.clientX, y: touch.clientY };
-				longPressed = false;
-
-				const target = e.target;
-				if (target.closest && target.closest('.el-popover, .el-dropdown__popper, .isdropdown, .operation-box, .pichome-detail-nav')) {
-					clearLongPressTimer();
-					return;
-				}
-
-				const match = findCardAndData(target);
-				if (!match) {
-					clearLongPressTimer();
-					return;
-				}
-
-				currentMatch = match;
-				clearLongPressTimer();
-				touchTimer = setTimeout(() => {
-					longPressed = true;
-					window.__pichomeLongPressed = true;
-					setTimeout(() => {
-						window.__pichomeLongPressed = false;
-					}, 600);
-
-					if (navigator.vibrate) {
-						try { navigator.vibrate(50); } catch (ignore) {}
-					}
-
-					self.ImageContextmenu({
-						target: {
-							clientX: touchStartPos.x,
-							clientY: touchStartPos.y,
-							pageX: touchStartPos.x + (window.pageXOffset || document.documentElement.scrollLeft || 0),
-							pageY: touchStartPos.y + (window.pageYOffset || document.documentElement.scrollTop || 0)
-						},
-						data: currentMatch.item,
-						checkedkeys: [currentMatch.rid]
-					});
-				}, 450);
-			}, { passive: true });
-
-			document.addEventListener('touchmove', (e) => {
-				if (!touchTimer) return;
-				if (e.touches.length !== 1) {
-					clearLongPressTimer();
-					return;
-				}
-				const touch = e.touches[0];
-				const dx = Math.abs(touch.clientX - touchStartPos.x);
-				const dy = Math.abs(touch.clientY - touchStartPos.y);
-				if (dx > 8 || dy > 8) {
-					clearLongPressTimer();
-				}
-			}, { passive: true });
-
-			document.addEventListener('touchend', (e) => {
-				clearLongPressTimer();
-				if (longPressed) {
-					e.preventDefault();
-				}
-			}, { passive: false });
-
-			document.addEventListener('touchcancel', () => {
-				clearLongPressTimer();
-			}, { passive: true });
-
-			document.addEventListener('click', (e) => {
-				if (window.__pichomeLongPressed) {
-					e.preventDefault();
-					e.stopImmediatePropagation();
-				}
-			}, true);
+			document.addEventListener('contextmenu', this.mobileMaterialContextMenu, true);
+		},
+		beforeUnmount(){
+			document.removeEventListener('contextmenu', this.mobileMaterialContextMenu, true);
 		}
 	};
 </script>

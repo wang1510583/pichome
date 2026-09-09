@@ -66,10 +66,23 @@
 
 	<script type="text/javascript">
 		var pichomeOriginalMediaUrl = $pichomePlayerSourceJson;
+		function pichomePauseOuterPreviews() {
+			var visited = [window];
+			var owner = window.parent !== window ? window.parent : window.opener;
+			while (owner && visited.indexOf(owner) < 0) {
+				visited.push(owner);
+				try {
+					owner.dispatchEvent(new owner.CustomEvent('pichome-detail-open'));
+					owner = owner.parent !== owner ? owner.parent : owner.opener;
+				} catch (ignore) { break; }
+			}
+		}
+		pichomePauseOuterPreviews();
 		var pichomeCacheIdentity = $pichomeCacheIdentityJson;
 		var pichomePoster = $pichomePosterJson || '';
 		var pichomePlayerMediaUrl = pichomeOriginalMediaUrl;
-		var pichomeIsVideoLoop = false;
+		var pichomeMobileVideoLoop = <!--{if $ismobile && !in_array($_GET['ext'], array('mp3', 'ogg', 'wav'))}-->true<!--{else}-->false<!--{/if}-->;
+		var pichomeIsVideoLoop = pichomeMobileVideoLoop;
 		try {
 			var loopVal = '';
 			if (window.parent && window.parent.localStorage) {
@@ -81,7 +94,7 @@
 			if (!loopVal && window.localStorage) {
 				loopVal = window.localStorage.getItem('pichome_video_loop');
 			}
-			pichomeIsVideoLoop = (loopVal === '1');
+			pichomeIsVideoLoop = pichomeMobileVideoLoop || (loopVal === '1');
 		} catch (ignore) {}
 		try {
 			if (window.PichomeCache && pichomeCacheIdentity) {
@@ -243,17 +256,18 @@
 		try {
 			if (typeof player !== 'undefined' && player && typeof player.on === 'function') {
 				player.on('ended', function() {
-					var shouldLoop = false;
+					var shouldLoop = pichomeMobileVideoLoop;
 					try {
 						var val = (window.parent && window.parent.localStorage && window.parent.localStorage.getItem('pichome_video_loop')) ||
 						          (window.top && window.top.localStorage && window.top.localStorage.getItem('pichome_video_loop')) ||
 						          (window.localStorage && window.localStorage.getItem('pichome_video_loop'));
-						shouldLoop = (val === '1');
+						shouldLoop = pichomeMobileVideoLoop || (val === '1');
 					} catch (e) {}
 					if (shouldLoop) {
 						try {
 							player.currentTime = 0;
-							player.play();
+							var replay = player.play();
+							if (replay && replay.catch) replay.catch(function() {});
 						} catch (e) {}
 					}
 				});
