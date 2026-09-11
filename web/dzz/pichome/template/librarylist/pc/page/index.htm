@@ -1,4 +1,9 @@
 <!--{template common/container/pc/header_start}-->
+<script src="static/js/pichome-list-snapshot.js?{VERHASH}-1"></script>
+<script src="static/js/pichome-fast-scroll.js?{VERHASH}-2"></script>
+<link rel="stylesheet" href="static/css/pichome-fast-scroll.css?{VERHASH}-3">
+<link rel="stylesheet" href="static/css/pichome-preview-controls.css?{VERHASH}-1">
+<script>PichomeListSnapshot.configure('<!--{if $_G['uid'] && !empty($_G['cookie']['auth'])}-->{eval echo hash('sha256', $_G['uid'].'|'.$_G['cookie']['auth']);}<!--{/if}-->', <!--{if helper_browser::ismobile()}-->true<!--{else}-->false<!--{/if}-->);</script>
 <link rel="stylesheet" href="static/scss/default/index.css?{VERHASH}">
 <script type="text/javascript" src="dzz/pichome/template/librarylist/assets/js/common.js?{VERHASH}"></script>
 <!-- spark-md5.js 库-->
@@ -9,7 +14,7 @@
 <script type="text/javascript" src="static/vue_components/screen/index.js?{VERHASH}"></script>
 <script type="text/javascript" src="static/vue_components/ImageFile/index.js?{VERHASH}"></script>
 <script type="text/javascript" src="dzz/details/template/pc/assets/js/frame-scrub.js?{VERHASH}&list-atlas=1"></script>
-<script type="text/javascript" src="static/vue_components/ImageLayout/index.js?{VERHASH}&scrollfix=1&previewfix=9"></script>
+<script type="text/javascript" src="static/vue_components/ImageLayout/index.js?{VERHASH}&scrollfix=1&previewfix=11"></script>
 <script type="text/javascript" src="static/vue_components/collectdialog/index.js?{VERHASH}"></script>
 <link rel="stylesheet" type="text/css" href="dzz/pichome/template/librarylist/pc/assets/css/index.css?{VERHASH}"/>
 <link rel="stylesheet" type="text/css" href="dzz/pichome/template/librarylist/pc/assets/css/files.css?{VERHASH}"/>
@@ -786,6 +791,9 @@
 		},
 		components: {
 		},
+		beforeUnmount(){
+			if(this._disposeFastScroll) this._disposeFastScroll();
+		},
 		mounted(){
 			var self = this;
 			<!--{if $_GET['do'] == 'tags' ||  $_GET['do'] == 'user'}-->
@@ -798,6 +806,7 @@
 			<!--{/if}-->
 						// 
 			this.scrollref = self.$refs.MainscrollbarRef;
+			this._disposeFastScroll = PichomeFastScroll(this.scrollref.wrapRef, function(){ return !self.ispc; });
 			window.onresize = function(){
 				self.DocumentResize += 1;
 				self.handleIsPc();

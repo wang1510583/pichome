@@ -30,6 +30,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             return route.fulfill({contentType: 'image/png', body: fs.readFileSync(atlasFile)});
         });
         await page.setContent('<base href="https://media.test/"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;height:3000px}video{width:100%;height:100%}</style><div id="app"></div>');
+        await page.addStyleTag({path: path.join(__dirname, '../web/static/css/pichome-preview-controls.css')});
         if (atlasMode) await page.addScriptTag({path: path.join(__dirname, '../web/dzz/details/template/pc/assets/js/frame-scrub.js')});
         await page.addScriptTag({path: path.join(__dirname, '../web/static/vue/vue@3/vue.prod.js')});
         const source = fs.readFileSync(path.join(__dirname, '../web/static/vue_components/ImageLayout/index.js'), 'utf8');
@@ -38,15 +39,17 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.evaluate(() => {
             window.app = Vue.createApp({
                 setup() { const api = rt.setup({ImageData: {rid: 'test', fps: 30, dpath: window.PichomeFrameScrub ? 'test' : '', mediaplayerpath: 'https://media.test/video'}}); window.api = api; return api; },
-                template: '<div ref="DomBox" @pointerdown="Pointerdown" @pointerup="Pointerup" @pointercancel="Pointercancel" style="height:240px;background:#111"><div ref="DomVideoBox" style="height:100%"></div></div>'
+                template: '<div class="image-item" style="position:relative"><div class="operation-box" style="position:absolute">菜单</div><div ref="DomBox" @pointerdown="Pointerdown" @pointerup="Pointerup" @pointercancel="Pointercancel" style="height:240px;background:#111"><span class="voice" style="position:absolute">静音</span><span class="time" style="position:absolute">秒数</span><div ref="DomVideoBox" style="height:100%"></div></div></div>'
             });
             app.mount('#app');
         });
         await page.locator('#app').tap({position: {x: 150, y: 100}});
         await page.waitForFunction(() => document.querySelector('video').currentTime > 0.1);
         assert.equal(await page.locator('video').evaluate(video => video.muted), false);
+        for (const selector of ['.voice', '.time', '.operation-box']) assert.equal(await page.locator(selector).isVisible(), false);
         await page.locator('video').tap();
         assert(await page.locator('video').evaluate(video => video.paused));
+        for (const selector of ['.voice', '.time', '.operation-box']) assert.equal(await page.locator(selector).isVisible(), true);
         await page.locator('video').evaluate(video => { video.currentTime = 1; });
         await page.waitForFunction(() => !document.querySelector('video').seeking);
         if (atlasMode) await page.waitForFunction(() => Object.values(document.querySelector('video').__pichomeDesktopFrameScrub.atlas.entries).filter(entry => entry.status === 'ready').length === 3);
@@ -54,6 +57,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const touch = (type, points) => client.send('Input.dispatchTouchEvent', {type, touchPoints: points.map(([x, y]) => ({id: 1, x, y}))});
         await touch('touchStart', [[100, 80]]);
         await touch('touchMove', [[121, 170]]);
+        for (const selector of ['.voice', '.time', '.operation-box']) assert.equal(await page.locator(selector).isVisible(), false);
         if (atlasMode) {
             await page.waitForFunction(() => Math.abs(document.querySelector('video').__pichomeDesktopFrameScrub.previewTime - 1.1) < 0.001);
             assert.equal(await page.locator('video').evaluate(video => video.currentTime), 1);
@@ -69,6 +73,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const result = await page.locator('video').evaluate(video => ({time: video.currentTime, paused: video.paused, scroll: window.scrollY}));
         assert(Math.abs(result.time - 1.1) < (atlasMode ? 1 / 30 : 0.001), JSON.stringify(result));
         assert(result.paused);
+        for (const selector of ['.voice', '.time', '.operation-box']) assert.equal(await page.locator(selector).isVisible(), true);
         assert.equal(result.scroll, 0);
         await page.locator('video').tap();
         await page.waitForFunction(() => !document.querySelector('video').paused);

@@ -545,7 +545,7 @@ public class MainActivity extends Activity {
                 + "}"
                 + "function installFrameCss(root){"
                 + "var scope=root&&root.querySelectorAll?root:document;"
-                + "scope.querySelectorAll('iframe').forEach(function(frame){"
+                + "var frames=Array.prototype.slice.call(scope.querySelectorAll('iframe'));if(scope.matches&&scope.matches('iframe'))frames.unshift(scope);frames.forEach(function(frame){"
                 + "lockDetailToFramePath(frame);function apply(){try{lockDetailToFramePath(frame);tryAutoplay(frame.contentDocument);installNativeMediaCache(frame.contentDocument);installMediaCss(frame.contentDocument);installFrameCss(frame.contentDocument);hideDownloads(frame.contentDocument);installDetailFrame(frame);}catch(ignore){}}"
                 + "if(!frame.dataset.pichomeAndroidAdaptive){frame.dataset.pichomeAndroidAdaptive='1';frame.addEventListener('load',apply);}"
                 + "apply();"
@@ -675,8 +675,8 @@ public class MainActivity extends Activity {
                 + "}"
                 + "function hideDownloads(root){"
                 + "var scope=root&&root.querySelectorAll?root:document;"
-                + "scope.querySelectorAll('a[download],a[href*=\\\"op=download\\\"],"
-                + ".el-dropdown-menu__item,button,.el-button,[role=menuitem]').forEach(function(el){"
+                + "var selector='a[download],a[href*=\\\"op=download\\\"],.el-dropdown-menu__item,button,.el-button,[role=menuitem]';"
+                + "var controls=Array.prototype.slice.call(scope.querySelectorAll(selector));if(scope.matches&&scope.matches(selector))controls.unshift(scope);controls.forEach(function(el){"
                 + "var text=(el.textContent||'').replace(/\\s+/g,'');"
                 + "var title=(el.getAttribute('title')||'').replace(/\\s+/g,'');"
                 + "var aria=(el.getAttribute('aria-label')||'').replace(/\\s+/g,'');"
@@ -754,8 +754,11 @@ public class MainActivity extends Activity {
                 + "installAll();[200,700,1600,3200].forEach(function(delay){setTimeout(installAll,delay);});"
                 + "if(window.__pichomeAndroidDownloadObserver){window.__pichomeAndroidDownloadObserver.disconnect();}"
                 + "window.__pichomeAndroidDownloadObserver=new MutationObserver(function(records){"
-                + "records.forEach(function(record){record.addedNodes.forEach(function(node){"
-                + "if(node.nodeType===1){safeInstall('new-frames',function(){installFrameCss(node);installFrameCss(node.parentNode);});safeInstall('new-downloads',function(){hideDownloads(node);hideDownloads(node.parentNode);});safeInstall('cache-menu',function(){installCacheMenuItem(document);});}});});"
+                + "var added=new Set(),menuChanged=false;records.forEach(function(record){record.addedNodes.forEach(function(node){if(node.nodeType===1)added.add(node);else if(node.nodeType===3&&record.target.closest){var control=record.target.closest('button,.el-button,.el-dropdown-menu__item,[role=menuitem],a');if(control)added.add(control);}});});"
+                + "added.forEach(function(node){if(!node.isConnected)return;for(var parent=node.parentElement;parent;parent=parent.parentElement){if(added.has(parent))return;}"
+                + "safeInstall('new-frames',function(){installFrameCss(node);});safeInstall('new-downloads',function(){hideDownloads(node);});"
+                + "if(node.matches('.el-dropdown-menu')||node.closest('.el-dropdown-menu')||node.querySelector('.el-dropdown-menu'))menuChanged=true;});"
+                + "if(menuChanged)safeInstall('cache-menu',function(){installCacheMenuItem(document);});"
                 + "});"
                 + "window.__pichomeAndroidDownloadObserver.observe(document.documentElement,{childList:true,subtree:true});"
                 + "})();";
@@ -877,12 +880,12 @@ public class MainActivity extends Activity {
     private void showCacheSettingsDialog(MediaDiskCache.CacheStats stats) {
         if (isFinishing() || isDestroyed()) return;
         if (cacheDialog != null) cacheDialog.dismiss();
-        String message = "已缓存：" + formatBytes(stats.totalBytes)
+        String message = "普通媒体缓存：" + formatBytes(stats.totalBytes)
                 + " / " + formatBytes(stats.maxBytes)
                 + "\n缓存素材：" + stats.itemCount + " 个"
+                + "\n封面持久缓存：" + formatBytes(stats.coverBytes) + "（" + stats.coverCount + " 个）"
                 + (stats.pendingCount > 0
-                ? "\n正在缓存：" + stats.pendingCount + " 个（已下载 "
-                + formatBytes(stats.pendingBytes) + "）"
+                ? "\n正在缓存或排队：" + stats.pendingCount + " 个"
                 : "")
                 + "\n\n诊断：发现 " + stats.discoveredCount
                 + " / 启动 " + stats.startedCount
@@ -890,7 +893,7 @@ public class MainActivity extends Activity {
                 + " / 失败 " + stats.failedCount
                 + " / 本地播放 " + stats.localPlaybackCount
                 + "\n最后状态：" + stats.lastDiagnostic
-                + "\n\n图片会在预览时自动缓存；视频首次预览时在后台补全。";
+                + "\n\n封面单独计量，不占容量额度、不参与自动清理。空间不足时停止新增；普通清理也保留封面。过期仍校验权限和版本。";
         cacheDialog = new AlertDialog.Builder(this)
                 .setTitle("素材缓存")
                 .setMessage(message)
@@ -921,7 +924,7 @@ public class MainActivity extends Activity {
             }
         }
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("缓存容量上限")
+                .setTitle("普通媒体缓存上限（不含封面）")
                 .setSingleChoiceItems(labels, selected, null)
                 .setNegativeButton("取消", null)
                 .setPositiveButton("保存", null)
@@ -946,7 +949,7 @@ public class MainActivity extends Activity {
     private void confirmClearCache() {
         new AlertDialog.Builder(this)
                 .setTitle("清理素材缓存？")
-                .setMessage("只删除 App 自动缓存的图片和视频，不会删除服务器素材或登录信息。")
+                .setMessage("只清理普通图片预览、视频和逐帧图集，保留素材封面。不会删除服务器素材或登录信息。卸载或清除应用数据会删除封面。")
                 .setPositiveButton("清理", (dialog, which) -> {
                     if (mediaDiskCache == null) return;
                     mediaDiskCache.clearAll(() -> runOnUiThread(() -> {

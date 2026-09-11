@@ -23,7 +23,7 @@
 		<template v-if="data.share || data.download || data.down || LeftCurrenType != 'recycle'">
 			<template v-if="ImageProps.layout=='rowGrid' || ImageProps.layout=='imageList' || ImageProps.layout=='waterFall'">
 				<div class="operation-box" @click.stop  :style="{opacity:data.isdropdown?1:''}">
-					<el-dropdown :trigger="ispc ? 'hover' : 'click'" @command="ImageOperationf" @visible-change="data.isdropdown = !data.isdropdown">
+					<el-dropdown class="pichome-preview-menu" :trigger="ispc ? 'hover' : 'click'" @command="ImageOperationf" @visible-change="data.isdropdown = !data.isdropdown">
 						<span class="operation-btn">
 							<el-icon><More-Filled /></el-icon>
 						</span>
@@ -82,7 +82,7 @@
 				</div>
 			</template>
 			<template v-else>
-				<el-dropdown :trigger="ispc ? 'hover' : 'click'" @command="ImageOperationf">
+				<el-dropdown class="pichome-preview-menu" :trigger="ispc ? 'hover' : 'click'" @command="ImageOperationf">
 					<el-button :plain="active" style="margin-left: 12px;" icon="MoreFilled"></el-button>
 					<template #dropdown>
 						<el-dropdown-menu>

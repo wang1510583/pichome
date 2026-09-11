@@ -79,6 +79,8 @@ final class MediaDiskCache {
     private volatile Thread localServerThread;
     private volatile String lastDiagnostic = "等待发现详情素材";
     private volatile long maxCacheBytes;
+    private final CacheInventory inventory = new CacheInventory();
+    private volatile boolean inventoryReady;
 
     MediaDiskCache(Context context, String allowedHost) {
         this.directory = preparePersistentDirectory(context);
@@ -94,6 +96,7 @@ final class MediaDiskCache {
         startLocalServer();
         worker.execute(() -> {
             try {
+                initializeInventory();
                 cleanup(0);
             } catch (Throwable ignored) {
                 // Cache maintenance must never terminate the app process.
@@ -167,7 +170,7 @@ final class MediaDiskCache {
             if (entry.expiresAt >= System.currentTimeMillis() || validate(entry, url, cookie, fallbackUserAgent)) {
                 return serveEntry(entry, request.getRequestHeaders());
             }
-            deleteEntry(key);
+            if (!isCoverEntry(entry)) deleteEntry(key);
         }
 
         return fetchFromNetwork(
@@ -232,43 +235,61 @@ final class MediaDiskCache {
     }
 
     CacheStats getStats() {
-        long totalBytes = 0;
-        long pendingBytes = 0;
-        int itemCount = 0;
-        File[] files = directory.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.getName().endsWith(".body")) {
-                    totalBytes += file.length();
-                    itemCount++;
-                } else if (file.getName().endsWith(".part")) {
-                    pendingBytes += file.length();
-                }
-            }
-        }
+        CacheInventory.Snapshot snapshot = inventory.snapshot();
         return new CacheStats(
-                totalBytes,
-                itemCount,
+                snapshot.mediaBytes,
+                snapshot.mediaCount,
+                snapshot.coverBytes,
+                snapshot.coverCount,
                 maxCacheBytes,
                 inFlight.size(),
-                pendingBytes,
+                0,
                 discoveredCount.get(),
                 startedCount.get(),
                 completedCount.get(),
                 failedCount.get(),
                 localPlaybackCount.get(),
-                lastDiagnostic
+                inventoryReady ? lastDiagnostic : "正在后台统计已有缓存，当前为部分统计"
         );
+    }
+
+    private void initializeInventory() {
+        File[] files = directory.listFiles();
+        if (files == null) return;
+        List<File> bodies = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        for (File file : files) {
+            String name = file.getName();
+            if (name.endsWith(".body")) bodies.add(file);
+            else if ((name.endsWith(".part") || name.endsWith(".tmp"))
+                    && now - file.lastModified() > 60L * 60L * 1000L) file.delete();
+        }
+        bodies.sort(Comparator.comparingLong(File::lastModified));
+        for (File body : bodies) {
+            synchronized (this) {
+                String key = body.getName().substring(0, body.getName().length() - 5);
+                Entry entry = readEntry(key);
+                if (entry != null) inventory.record(key, entry.length, isCoverEntry(entry));
+            }
+        }
+        inventoryReady = true;
     }
 
     void clearAll(Runnable completion) {
         Thread clearThread = new Thread(() -> {
             try {
-                synchronized (MediaDiskCache.this) {
-                    generation.incrementAndGet();
-                    File[] files = directory.listFiles();
-                    if (files != null) {
-                        for (File file : files) {
+                generation.incrementAndGet();
+                File[] files = directory.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        synchronized (MediaDiskCache.this) {
+                            String name = file.getName();
+                            if (name.endsWith(".body") || name.endsWith(".meta")) {
+                                Entry entry = readEntry(name.substring(0, name.length() - 5));
+                                if (entry != null && isCoverEntry(entry)) continue;
+                                deleteEntry(name.substring(0, name.length() - 5));
+                                continue;
+                            }
                             file.delete();
                         }
                     }
@@ -327,6 +348,18 @@ final class MediaDiskCache {
         String query = uri == null ? null : uri.getEncodedQuery();
         return query != null
                 && hasQueryValue(query.toLowerCase(Locale.US), "op", "getstream");
+    }
+
+    private boolean isCoverEntry(Entry entry) {
+        return entry != null && entry.mimeType.startsWith("image/") && isCoverUrl(entry.url);
+    }
+
+    private boolean isCoverUrl(String url) {
+        Uri uri = Uri.parse(url);
+        return isCacheableMediaUri(uri)
+                && "io".equalsIgnoreCase(uri.getQueryParameter("mod"))
+                && "getImg".equalsIgnoreCase(uri.getQueryParameter("op"))
+                && !"large".equalsIgnoreCase(uri.getQueryParameter("variant"));
     }
 
     private boolean hasQueryValue(String query, String name, String value) {
@@ -403,7 +436,7 @@ final class MediaDiskCache {
                     && statusCode < 300
                     && isResponseCacheable(connection)
                     && isCompleteRepresentation(connection, statusCode, contentLength)
-                    && canStore(contentLength);
+                    && canStore(contentLength, isCoverUrl(url) && mimeType.startsWith("image/"));
 
             InputStream responseBody;
             if (cacheable) {
@@ -501,6 +534,10 @@ final class MediaDiskCache {
             }
             int statusCode = connection.getResponseCode();
             rememberResponseCookies(url, connection);
+            if (statusCode == 401 || statusCode == 403 || statusCode == 404 || statusCode == 410) {
+                deleteEntry(entry.key);
+                return false;
+            }
             boolean unchanged = statusCode == HttpURLConnection.HTTP_NOT_MODIFIED;
             if (!unchanged && statusCode >= 200 && statusCode < 300) {
                 String remoteEtag = connection.getHeaderField("ETag");
@@ -733,7 +770,7 @@ final class MediaDiskCache {
                     return;
                 }
                 long length = getContentLength(connection);
-                if (!canStore(length)) {
+                if (!canStore(length, isCoverUrl(url) && parseMimeType(connection.getContentType()).startsWith("image/"))) {
                     lastDiagnostic = length <= 0
                             ? "服务器没有返回素材大小"
                             : "素材过大或手机可用空间不足";
@@ -824,24 +861,33 @@ final class MediaDiskCache {
                 || temporary.length() != expectedLength
                 || entry.generation != generation.get()
                 || !isCurrentSession(entry)
-                || expectedLength > maxCacheBytes
+                || (!isCoverEntry(entry) && expectedLength > maxCacheBytes)
                 || directory.getUsableSpace() < MIN_FREE_SPACE_BYTES) {
             if (temporary != null) temporary.delete();
             return;
         }
-        cleanup(expectedLength);
+        if (!inventoryReady && !isCoverEntry(entry)) {
+            temporary.delete();
+            return;
+        }
+        cleanup(isCoverEntry(entry) ? 0 : expectedLength);
         File target = bodyFile(entry.key);
         if (target.exists() && !target.delete()) {
             temporary.delete();
             return;
         }
+        inventory.remove(entry.key);
         if (!temporary.renameTo(target)) {
             temporary.delete();
             return;
         }
         entry.body = target;
         entry.length = target.length();
-        writeEntryMetadata(entry);
+        if (!writeEntryMetadata(entry)) {
+            deleteEntry(entry.key);
+            return;
+        }
+        inventory.record(entry.key, entry.length, isCoverEntry(entry));
         touch(entry);
         cleanup(0);
     }
@@ -850,6 +896,7 @@ final class MediaDiskCache {
         File body = bodyFile(key);
         File metadata = metadataFile(key);
         if (!body.isFile() || !metadata.isFile()) {
+            inventory.remove(key);
             return null;
         }
         Properties properties = new Properties();
@@ -881,7 +928,7 @@ final class MediaDiskCache {
         }
     }
 
-    private synchronized void writeEntryMetadata(Entry entry) {
+    private synchronized boolean writeEntryMetadata(Entry entry) {
         Properties properties = new Properties();
         properties.setProperty("url", entry.url);
         properties.setProperty("sessionScope", entry.sessionScope);
@@ -897,50 +944,30 @@ final class MediaDiskCache {
             output.flush();
             File target = metadataFile(entry.key);
             if (target.exists()) target.delete();
-            if (!temporary.renameTo(target)) temporary.delete();
+            if (temporary.renameTo(target)) return true;
+            temporary.delete();
         } catch (IOException ignored) {
             temporary.delete();
         }
+        return false;
     }
 
     private synchronized void cleanup(long incomingBytes) {
-        if (!directory.isDirectory()) return;
-        File[] files = directory.listFiles();
-        if (files == null) return;
-
-        List<File> bodies = new ArrayList<>();
-        long total = 0;
-        long now = System.currentTimeMillis();
-        for (File file : files) {
-            if (file.getName().endsWith(".body")) {
-                String key = file.getName().substring(0, file.getName().length() - 5);
-                if (readEntry(key) == null) continue;
-                bodies.add(file);
-                total += file.length();
-            } else if ((file.getName().endsWith(".part") || file.getName().endsWith(".tmp"))
-                    && now - file.lastModified() > 60L * 60L * 1000L) {
-                file.delete();
-            }
-        }
-        bodies.sort(Comparator.comparingLong(File::lastModified));
-        for (File body : bodies) {
-            boolean overBudget = total + incomingBytes > maxCacheBytes;
+        if (!inventoryReady) return;
+        if (inventory.snapshot().mediaBytes + incomingBytes <= maxCacheBytes
+                && directory.getUsableSpace() >= incomingBytes + MIN_FREE_SPACE_BYTES) return;
+        for (String key : inventory.oldestMedia()) {
+            boolean overBudget = inventory.snapshot().mediaBytes + incomingBytes > maxCacheBytes;
             boolean lowSpace = directory.getUsableSpace() < incomingBytes + MIN_FREE_SPACE_BYTES;
             if (!overBudget && !lowSpace) break;
-            long length = body.length();
-            String name = body.getName();
-            String key = name.substring(0, name.length() - ".body".length());
-            if (body.delete()) {
-                metadataFile(key).delete();
-                total -= length;
-            }
+            deleteEntry(key);
         }
     }
 
-    private boolean canStore(long length) {
+    private boolean canStore(long length, boolean cover) {
         return length > 0
                 && length <= MAX_SINGLE_FILE_BYTES
-                && length <= maxCacheBytes
+                && (cover || length <= maxCacheBytes)
                 && directory.isDirectory()
                 && directory.getUsableSpace() >= length + MIN_FREE_SPACE_BYTES;
     }
@@ -1113,11 +1140,14 @@ final class MediaDiskCache {
     }
 
     private synchronized void deleteEntry(String key) {
-        bodyFile(key).delete();
+        File body = bodyFile(key);
+        if (body.exists() && !body.delete()) return;
         metadataFile(key).delete();
+        inventory.remove(key);
     }
 
     private void touch(Entry entry) {
+        inventory.touch(entry.key);
         long now = System.currentTimeMillis();
         entry.body.setLastModified(now);
         metadataFile(entry.key).setLastModified(now);
@@ -1160,6 +1190,8 @@ final class MediaDiskCache {
     static final class CacheStats {
         final long totalBytes;
         final int itemCount;
+        final long coverBytes;
+        final int coverCount;
         final long maxBytes;
         final int pendingCount;
         final long pendingBytes;
@@ -1173,6 +1205,8 @@ final class MediaDiskCache {
         CacheStats(
                 long totalBytes,
                 int itemCount,
+                long coverBytes,
+                int coverCount,
                 long maxBytes,
                 int pendingCount,
                 long pendingBytes,
@@ -1185,6 +1219,8 @@ final class MediaDiskCache {
         ) {
             this.totalBytes = totalBytes;
             this.itemCount = itemCount;
+            this.coverBytes = coverBytes;
+            this.coverCount = coverCount;
             this.maxBytes = maxBytes;
             this.pendingCount = pendingCount;
             this.pendingBytes = pendingBytes;

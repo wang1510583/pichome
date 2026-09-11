@@ -1,0 +1,63 @@
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+(async () => {
+    const browser = await chromium.launch({headless:true});
+    try {
+        const page = await browser.newPage({viewport:{width:400, height:800}, hasTouch:true});
+        await page.setContent('<main style="position:relative;height:650px"><div style="height:100%"><div id="scroll" style="height:100%;overflow:auto"><div id="content" style="height:10000px">Materials</div></div></div></main>');
+        await page.addStyleTag({path:path.join(__dirname, '../web/static/css/pichome-fast-scroll.css')});
+        await page.addScriptTag({path:path.join(__dirname, '../web/static/js/pichome-fast-scroll.js')});
+        await page.evaluate(() => {
+            window.mobile = true;
+            window.dispose = PichomeFastScroll(document.querySelector('#scroll'), () => mobile);
+            window.sidebarTouches = 0;
+            document.addEventListener('touchstart', () => sidebarTouches++);
+        });
+        const slider = page.locator('[role=slider]');
+        await slider.waitFor({state:'visible'});
+        assert.equal(await page.locator('.pichome-fast-scroll-thumb').evaluate(node => getComputedStyle(node).opacity), '0.25');
+        const bounds = await slider.boundingBox();
+        await page.mouse.move(bounds.x + 30, bounds.y + bounds.height / 2);
+        await page.mouse.down();
+        assert.equal(await page.locator('.pichome-fast-scroll-thumb').evaluate(node => getComputedStyle(node).opacity), '0.25');
+        await page.mouse.move(bounds.x + 30, bounds.y + bounds.height - 22, {steps:8});
+        await page.waitForFunction(() => document.querySelector('#scroll').scrollTop > 9000);
+        await page.evaluate(() => { document.querySelector('#content').style.height = '20000px'; });
+        await page.waitForFunction(() => document.querySelector('#scroll').scrollTop > 19000);
+        await page.mouse.up();
+        await page.waitForFunction(() => document.querySelector('[role=slider]').getAttribute('aria-valuenow') === '0');
+        assert.ok(await page.evaluate(() => document.querySelector('#scroll').scrollTop > 19000));
+        const centered = await page.locator('.pichome-fast-scroll-thumb').boundingBox();
+        assert.ok(Math.abs(centered.y + centered.height / 2 - bounds.y - bounds.height / 2) < 1);
+        await page.mouse.move(bounds.x + 30, bounds.y + bounds.height / 2);
+        await page.mouse.down();
+        assert.ok(await page.evaluate(() => document.querySelector('#scroll').scrollTop > 19000));
+        await page.mouse.move(bounds.x + 30, bounds.y + bounds.height / 4, {steps:4});
+        await page.mouse.up();
+        await page.waitForFunction(() => document.querySelector('[role=slider]').getAttribute('aria-valuenow') === '0');
+        assert.ok(await page.evaluate(() => document.querySelector('#scroll').scrollTop < 15000));
+        await slider.focus();
+        await page.keyboard.press('Home');
+        await page.waitForFunction(() => document.querySelector('#scroll').scrollTop === 0);
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send('Input.dispatchTouchEvent', {type:'touchStart', touchPoints:[{x:bounds.x+30,y:bounds.y+bounds.height/2}]});
+        await cdp.send('Input.dispatchTouchEvent', {type:'touchMove', touchPoints:[{x:bounds.x+25,y:bounds.y+bounds.height*0.75}]});
+        await cdp.send('Input.dispatchTouchEvent', {type:'touchEnd', touchPoints:[]});
+        await page.waitForFunction(() => document.querySelector('#scroll').scrollTop > 5000);
+        assert.equal(await page.evaluate(() => sidebarTouches), 0);
+        assert.equal(await slider.evaluate(node => node.classList.contains('active')), false);
+        await page.evaluate(() => {
+            document.querySelector('#scroll').scrollTop = 0;
+            document.querySelector('#content').style.height = '50px';
+        });
+        await slider.waitFor({state:'hidden'});
+        await page.evaluate(() => { document.querySelector('#content').style.height = '10000px'; });
+        await slider.waitFor({state:'visible'});
+        await page.evaluate(() => { mobile = false; window.dispatchEvent(new Event('resize')); });
+        await slider.waitFor({state:'hidden'});
+        await page.evaluate(() => dispose());
+        assert.equal(await slider.count(), 0);
+        console.log('PASS: release recenters without moving content, repeat drag has no jump, mouse/touch fast drag, appended-page tracking, keyboard, sidebar isolation and disposal');
+    } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,0 +1,7 @@
+.pichome-preview-busy .voice,
+.pichome-preview-busy .time,
+.pichome-preview-busy .operation-box,
+.pichome-preview-busy .pichome-preview-menu {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
