@@ -872,6 +872,12 @@
 			const PICHOME_DRAG_MIME = 'text/pichome-rids';
 			const PICHOME_DOWNLOAD_DRAG_MIME = 'application/x-pichome-download+json';
 			let pichomeDragCard = null;
+			let pichomeDragSelection = null;
+			function pichomeSelectedRids(){
+				const layout = self.$refs.RefImageLayout;
+				const selected = layout && Array.isArray(layout.CheckedKeys) ? layout.CheckedKeys : (self.ImageParam && self.ImageParam.checkedKdys);
+				return Array.isArray(selected) ? Array.from(new Set(selected.map(String))) : [];
+			}
 			let pichomeExpandTimer = null;
 			function pichomeGetDragRids(ev){
 				if(ev && ev.dataTransfer){
@@ -978,12 +984,15 @@
 			// 左键按下素材卡片时临时启用 draggable(卡片图片默认 draggable=false)
 			document.addEventListener('mousedown', function(ev){
 				if(ev.button !== 0) return;
+				pichomeDragSelection = null;
 				const card = ev.target && ev.target.closest ? ev.target.closest('[data-rid]') : null;
 				if(!card || !document.body.contains(card)){ pichomeDragCard = null; return; }
 				pichomeDragCard = card;
+				pichomeDragSelection = {rid:card.getAttribute('data-rid'), rids:pichomeSelectedRids()};
 				card.setAttribute('draggable','true');
 			}, true);
 			window.addEventListener('mouseup', function(){
+				pichomeDragSelection = null;
 				if(pichomeDragCard){
 					const c = pichomeDragCard;
 					setTimeout(function(){ c.setAttribute('draggable','false'); }, 0);
@@ -997,8 +1006,11 @@
 				const rid = card.getAttribute('data-rid');
 				if(!rid) return;
 				let rids = [rid];
-				const checked = (self.ImageParam && self.ImageParam.checkedKdys) || [];
+				const checked = pichomeDragSelection && pichomeDragSelection.rid === rid && pichomeDragSelection.rids.indexOf(rid) > -1 ? pichomeDragSelection.rids : pichomeSelectedRids();
 				if(checked.length > 1 && checked.indexOf(rid) > -1) rids = checked.slice();
+				const layout = self.$refs.RefImageLayout;
+				if(layout && Array.isArray(layout.CheckedKeys)) layout.CheckedKeys = rids.slice();
+				self.Imagedragselect({CheckedKeys:rids.slice()});
 				try{ ev.dataTransfer.setData(PICHOME_DRAG_MIME, JSON.stringify(rids)); }catch(err){}
 				const dragItem = pichomeGetDragResource(rid);
 				let hasDownload = false;
@@ -1024,6 +1036,7 @@
 				pichomeClearDropUI();
 			}, false);
 			document.addEventListener('dragend', function(){
+				pichomeDragSelection = null;
 				const dw2 = document.querySelector('#pichome-left-sidebar');
 				if(dw2) dw2.classList.remove('pichome-dragging-asset');
 				window.__pichomeDragRids = [];

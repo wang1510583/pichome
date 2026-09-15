@@ -597,8 +597,8 @@
 				this.RightGetData();
 			},
 			Imagedragselect({CheckedKeys}){
+				this.ImageParam.checkedKdys = Array.isArray(CheckedKeys) ? CheckedKeys.slice() : [];
 				if(CheckedKeys && CheckedKeys.length){
-					this.ImageParam.checkedKdys = CheckedKeys;
 					this.RightParamClean();
 					this.RightType = 'file';
 					this.RightActiveRid = CheckedKeys;
