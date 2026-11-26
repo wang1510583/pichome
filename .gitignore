@@ -25,6 +25,7 @@ web/data/template/*
 web/data/cache/tags.php
 
 # Local backups and editor files
+eagle-sync/backups/
 *.backup-*
 *.swp
 *.tmp
